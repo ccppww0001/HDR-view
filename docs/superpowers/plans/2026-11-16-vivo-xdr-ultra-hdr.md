@@ -81,19 +81,19 @@ class SdrImage:
 **Interfaces:**
 - Produces: `read_source(path: Path) -> SourceBytes`、`SourceBytes(path, data, sha256)`、`create_output_dir(root: Path) -> Path`、`assert_original_unchanged(source: SourceBytes) -> None`。
 
-- [ ] **Step 1: 写只读和防覆盖失败测试**
+- [x] **Step 1: 写只读和防覆盖失败测试**
 
 测试目录符号链接/普通文件、重复运行、输出路径等于输入、处理后源哈希变化；要求默认拒绝覆盖，输出目录不能为原图所在目录。
 
-- [ ] **Step 2: 运行测试确认因模块不存在失败**
+- [x] **Step 2: 运行测试确认因模块不存在失败**
 
 Run: `python -m pytest tests/unit/test_source_output.py -v`
 
-- [ ] **Step 3: 建立最小项目与安全的文件接口**
+- [x] **Step 3: 建立最小项目与安全的文件接口**
 
 `pyproject.toml` 要求 Python `>=3.12,<3.13`，核心依赖先仅 `numpy`、`Pillow`、`opencv-python-headless`；测试依赖 `pytest`。源文件一次性读入，计算 SHA-256；所有后续步骤接收 `SourceBytes` 而不是重新打开原图。
 
-- [ ] **Step 4: 验证与提交**
+- [x] **Step 4: 验证与提交**
 
 Run: `python -m pytest tests/unit/test_source_output.py -v`
 

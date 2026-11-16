@@ -11,3 +11,7 @@ class OutputConflictError(HdrViewError):
 
 class SourceChangedError(HdrViewError):
     """源文件内容已不同于读取时记录的哈希。"""
+
+
+class InvalidJpegError(HdrViewError):
+    """JPEG 结构、声明偏移或私有尾部不可信。"""
