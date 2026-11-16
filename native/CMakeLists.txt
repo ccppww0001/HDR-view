@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.24)
+project(hdrview_ultrahdr LANGUAGES CXX)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+if(NOT UHDR_SOURCE_DIR)
+  message(FATAL_ERROR "必须显式提供固定并校验的 UHDR_SOURCE_DIR")
+endif()
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(UHDR_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(UHDR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(UHDR_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(UHDR_ENABLE_HEIF OFF CACHE BOOL "" FORCE)
+set(UHDR_ENABLE_GLES OFF CACHE BOOL "" FORCE)
+set(UHDR_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+if(NOT JPEG_SOURCE_DIR)
+  message(FATAL_ERROR "必须显式提供固定并校验的 JPEG_SOURCE_DIR")
+endif()
+include(ExternalProject)
+set(JPEG_INSTALL ${CMAKE_BINARY_DIR}/jpeg-install)
+ExternalProject_Add(libjpeg_turbo
+  SOURCE_DIR ${JPEG_SOURCE_DIR}
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${JPEG_INSTALL} -DCMAKE_INSTALL_LIBDIR=lib -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_SIMD=OFF -DWITH_TOOLS=OFF -DWITH_TESTS=OFF -DWITH_TURBOJPEG=OFF -DWITH_CRT_DLL=OFF
+  BUILD_BYPRODUCTS ${JPEG_INSTALL}/lib/jpeg-static.lib ${JPEG_INSTALL}/include/jconfig.h
+)
+set(JPEG_LIBRARY ${JPEG_INSTALL}/lib/jpeg-static.lib CACHE FILEPATH "" FORCE)
+set(JPEG_INCLUDE_DIR "${JPEG_INSTALL}/include" CACHE PATH "" FORCE)
+add_subdirectory(${UHDR_SOURCE_DIR} ultrahdr)
+
+add_executable(hdrview-ultrahdr src/hdrview_ultrahdr.cpp)
+target_compile_features(hdrview-ultrahdr PRIVATE cxx_std_17)
+target_compile_options(hdrview-ultrahdr PRIVATE /utf-8)
+target_include_directories(hdrview-ultrahdr PRIVATE ${UHDR_SOURCE_DIR})
+target_link_libraries(hdrview-ultrahdr PRIVATE uhdr-static)
