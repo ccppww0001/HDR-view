@@ -15,3 +15,7 @@ class SourceChangedError(HdrViewError):
 
 class InvalidJpegError(HdrViewError):
     """JPEG 结构、声明偏移或私有尾部不可信。"""
+
+
+class InvalidVivoDataError(HdrViewError):
+    """vivo 私有元数据或辅助图不可信。"""
