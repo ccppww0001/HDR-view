@@ -19,3 +19,7 @@ class InvalidJpegError(HdrViewError):
 
 class InvalidVivoDataError(HdrViewError):
     """vivo 私有元数据或辅助图不可信。"""
+
+
+class InvalidIntermediateError(HdrViewError):
+    """HDR 中间像素或其色彩元数据不符合契约。"""
