@@ -23,3 +23,7 @@ class InvalidVivoDataError(HdrViewError):
 
 class InvalidIntermediateError(HdrViewError):
     """HDR 中间像素或其色彩元数据不符合契约。"""
+
+
+class UnsupportedImageError(HdrViewError):
+    """输入结构可读，但超出当前已验证的支持范围。"""

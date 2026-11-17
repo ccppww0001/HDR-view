@@ -1,0 +1,11 @@
+# vivo 研究候选工作流
+
+当前命令只生成带 sidecar 的 HDR 中间结果，尚未声称完成标准 Ultra HDR 导出或手机观感复现。
+
+```powershell
+python -m hdrview.cli inspect D:\MyProject\HDR-view\images\fromthephone
+python -m hdrview.cli analyze-vivo D:\MyProject\HDR-view\images\fromthephone\IMG_20261116_212648.jpg
+python -m hdrview.cli reconstruct-vivo D:\MyProject\HDR-view\images\fromthephone\IMG_20261116_212648.jpg --output <临时结果目录>
+```
+
+参数默认：`additive-residual`、scale=4.0、max_gain_cap=4.5、highlight_threshold=0.02。它们是待标定研究参数，不是 vivo 官方参数。输出报告固定 `xdr_appearance_verified=false`，原始文件只读且输出目录不复用。
