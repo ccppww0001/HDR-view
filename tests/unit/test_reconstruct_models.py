@@ -77,6 +77,31 @@ def test_candidate_reconstruction_does_not_create_nan_or_global_shadow_gain():
         assert result[0, 0] == pytest.approx(primary[0, 0])
 
 
+def test_candidate_reconstruction_is_continuous_across_highlight_threshold():
+    primary = np.ones((2, 2), dtype=np.float32)
+    threshold = 0.4
+    below = np.full((1, 1), threshold * (1 - 1e-4), dtype=np.float32)
+    above = np.full((1, 1), threshold * (1 + 1e-4), dtype=np.float32)
+    params = ReconstructionParams(model="ratio", scale=1.0, max_gain_cap=2.0, highlight_threshold=threshold)
+
+    result_below = reconstruct(primary, below, params)
+    result_above = reconstruct(primary, above, params)
+
+    relative_change = np.abs(result_above - result_below) / np.maximum(result_below, 1e-6)
+    assert np.max(relative_change) < 0.02
+
+
+def test_zero_threshold_enables_only_strictly_positive_auxiliary():
+    primary = np.ones((1, 1), dtype=np.float32)
+    params = ReconstructionParams(model="additive-residual", scale=1.0, max_gain_cap=2.0, highlight_threshold=0.0)
+
+    black_result = reconstruct(primary, np.zeros((1, 1), dtype=np.float32), params)
+    positive_result = reconstruct(primary, np.ones((1, 1), dtype=np.float32) * 1e-4, params)
+
+    np.testing.assert_array_equal(black_result, primary)
+    assert positive_result[0, 0] > primary[0, 0]
+
+
 def test_unknown_model_is_rejected_instead_of_assuming_vivo_formula():
     with pytest.raises(ValueError):
         reconstruct(np.zeros((1, 1), dtype=np.float32), np.zeros((1, 1), dtype=np.float32), ReconstructionParams(model="unknown", scale=1, max_gain_cap=1, highlight_threshold=0.1))

@@ -1,6 +1,6 @@
 # vivo 研究候选工作流
 
-当前命令只生成带 sidecar 的 HDR 中间结果，尚未声称完成标准 Ultra HDR 导出或手机观感复现。`convert-vivo` 可输出标准 Ultra HDR；所有生成结果默认进入项目 `output/<任务>/run-NNN`。
+`reconstruct-vivo` 只生成带 sidecar 的 HDR 中间结果；`convert-vivo` 导出标准 Ultra HDR JPEG 与 HDR400 JPEG XR。所有生成结果默认进入项目 `output/<任务>/run-NNN`，不覆盖旧输出，不声称复现手机观感。
 
 ```powershell
 python -m hdrview.cli inspect D:\MyProject\HDR-view\images\fromthephone

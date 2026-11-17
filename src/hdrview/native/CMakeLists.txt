@@ -33,3 +33,11 @@ target_compile_features(hdrview-ultrahdr PRIVATE cxx_std_17)
 target_compile_options(hdrview-ultrahdr PRIVATE /utf-8)
 target_include_directories(hdrview-ultrahdr PRIVATE ${UHDR_SOURCE_DIR})
 target_link_libraries(hdrview-ultrahdr PRIVATE uhdr-static)
+
+# Windows WIC 系统 JPEG XR 编解码器：只接受/输出原生 float16，禁止静默降到整数。
+if(WIN32)
+  add_executable(hdrview-jxr hdrview_jxr.cpp)
+  target_compile_features(hdrview-jxr PRIVATE cxx_std_17)
+  target_compile_options(hdrview-jxr PRIVATE /utf-8)
+  target_link_libraries(hdrview-jxr PRIVATE windowscodecs bcrypt)
+endif()

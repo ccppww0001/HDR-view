@@ -12,5 +12,11 @@ SHA-256：`7C2B5F02B463CB9E67AD00F24CC504198FFC384D32B3793781038245FB4B9171`
 
 ```powershell
 $env:HDRVIEW_TOOL_DIR = 'C:\Users\N452\AppData\Local\Temp\opencode\hdrview-build'
-pwsh -File src/hdrview/build/Build-Native.ps1 -Test
+pwsh -File src/hdrview/native/Build-Native.ps1 -Test
 ```
+
+同一构建入口还生成 `hdrview-jxr.exe`。它通过 Windows WIC 的 `GUID_ContainerFormatWmp` 编码 `GUID_WICPixelFormat64bppRGBAHalf`：共享 BT.2020 线性光（参考白 203 nit）先以 `REC709_TO_BT2020` 的**数值逆矩阵**转为 Rec.709 scRGB（参考白 80 nit），再全分辨率写入。该色彩矩阵并非正交矩阵，不能用转置代替逆矩阵，否则中性白也会偏色。原生解码只接受该 float16 格式，若系统拒绝或更改像素格式会明确失败，不会静默降为整数。sidecar 只从顶层读取固定字段，拒绝重复/嵌套保留字段和不完整的数值、字符串标量 token。JPEG XR 输出先写临时文件，关闭并提交 WIC 后移动，且不覆盖已有文件。
+
+实测 Windows WIC 接受 `UseCodecOptions=true`、`Lossless=true`、`Subsampling=3` 属性，但对本机 float16 色块回读没有可测改善；仅 `ImageQuality=1.0` 与增加三个选项的结果都满足相同的严格误差界限。因此最终实现不保留这三个无效选项，也不据此声称 float16 JPEG XR 无损。16×16 固定色块实测最大绝对误差约为 0.000308；高光 `(2,1,0.5)` 回读约 `(2.000133,1.000146,0.500090)`。复杂纹理仍可能有 JPEG XR 有损误差，测试只对明确色块作严格数值保证。
+
+WIC 编解码与像素回读只证明格式及 HDR 数值保留；**Windows Photos 的 HDR 显示未验证**。

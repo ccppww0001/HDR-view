@@ -4,8 +4,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (!$ToolDirectory) { throw '请通过 HDRVIEW_TOOL_DIR 或 -ToolDirectory 指定临时/忽略的构建工具目录' }
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$build = Join-Path $root 'src/hdrview/native/build'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..')).Path
+# native/ 是唯一构建入口；构建产物继续留在已被忽略的 native/build。
+$build = Join-Path $PSScriptRoot 'build'
 New-Item -ItemType Directory -Path $ToolDirectory, $build -Force | Out-Null
 
 # 固定官方源码；压缩包 SHA-256 独立于源码内容执行前校验。
@@ -35,7 +36,7 @@ $jpegSource = Join-Path $ToolDirectory 'libjpeg-turbo-3.2.0'
 if (!(Test-Path -LiteralPath $jpegSource)) { tar.exe -xzf $jpegArchive -C $ToolDirectory }
 $cmake = Join-Path $env:ProgramFiles 'Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
 if (!(Test-Path -LiteralPath $cmake)) { $cmake = (Get-Command cmake -ErrorAction Stop).Source }
-& $cmake -S (Join-Path $root 'src/hdrview/native') -B $build -A x64 "-DUHDR_SOURCE_DIR=$source" "-DJPEG_SOURCE_DIR=$jpegSource" '-DUHDR_BUILD_DEPS=OFF' '-DUHDR_ENABLE_HEIF=OFF' '-DUHDR_BUILD_EXAMPLES=OFF' '-DUHDR_BUILD_TESTS=OFF' '-DBUILD_SHARED_LIBS=OFF'
+& $cmake -S $PSScriptRoot -B $build -A x64 "-DUHDR_SOURCE_DIR=$source" "-DJPEG_SOURCE_DIR=$jpegSource" '-DUHDR_BUILD_DEPS=OFF' '-DUHDR_ENABLE_HEIF=OFF' '-DUHDR_BUILD_EXAMPLES=OFF' '-DUHDR_BUILD_TESTS=OFF' '-DBUILD_SHARED_LIBS=OFF'
 if ($LASTEXITCODE -ne 0) { throw 'CMake 配置失败' }
 & $cmake --build $build --config Release
 if ($LASTEXITCODE -ne 0) { throw '本地 Ultra HDR 桥接构建失败' }
@@ -44,5 +45,10 @@ if ($Test) {
     if (!(Test-Path -LiteralPath $executable)) { throw '构建产物不存在' }
     & $executable --version
     if ($LASTEXITCODE -ne 0) { throw '桥接版本检查失败' }
+    $jxrExecutable = Join-Path $build 'Release/hdrview-jxr.exe'
+    if (!(Test-Path -LiteralPath $jxrExecutable)) { throw 'JPEG XR 桥接构建产物不存在' }
+    & $jxrExecutable --version
+    if ($LASTEXITCODE -ne 0) { throw 'JPEG XR 桥接版本检查失败' }
 }
 Write-Host "桥接位置：$build/Release/hdrview-ultrahdr.exe"
+Write-Host "JPEG XR 桥接位置：$build/Release/hdrview-jxr.exe"

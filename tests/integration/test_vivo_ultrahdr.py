@@ -30,6 +30,21 @@ def test_vivo_candidate_exports_real_ultrahdr_and_preserves_sdr_base(tmp_path: P
     assert report.width == 4096 and report.height == 3072
     assert report.gainmap_width > 0
     assert report.hdr_capacity_max == pytest.approx(400 / 203, rel=0.001)
+    assert inspect_ultrahdr(output_dir / "IMG_20261116_212648-UltraHDR-1000nit.jpg").hdr_capacity_max == pytest.approx(1000 / 203, rel=0.001)
+    jxr_path = output_dir / "IMG_20261116_212648-HDR-400nit.jxr"
+    assert jxr_path.is_file()
+    from hdrview.output.jxr import decode_jxr
+    jxr = decode_jxr(jxr_path)
+    assert jxr.rgba.shape == (3072, 4096, 4)
+    records = {item["target_nits"]: item for item in payload[0]["outputs"]}
+    assert records[400]["display_mapping"] == "hdr400-highlight-compression"
+    assert records[400]["hdr_capacity_max"] == pytest.approx(400 / 203, rel=0.001)
+    assert records[400]["jpeg_xr"]["native_float"] is True
+    assert records[400]["jpeg_xr"]["windows_photos_hdr_verified"] is False
+    assert "hdr_capacity_max" not in records[400]["jpeg_xr"]
+    assert records[1000]["display_mapping"] == "none"
+    assert records[1000]["hdr_capacity_max"] == pytest.approx(1000 / 203, rel=0.001)
+    assert "jpeg_xr" not in records[1000]
     assert payload[0]["xdr_appearance_verified"] is False
     assert "未验证" in payload[0]["status"]
     assert source.read_bytes() == before
@@ -50,6 +65,17 @@ def test_plain_sdr_input_is_not_faked_into_ultrahdr(tmp_path: Path):
     with pytest.raises(Exception, match="没有 vivo"):
         main(["convert-vivo", str(plain), "--output", str(tmp_path / "out")])
     assert not (tmp_path / "out").exists()
+
+
+def test_verify_writes_json_without_raw_pixel_arrays(tmp_path: Path):
+    if not SAMPLES.is_dir():
+        pytest.skip("私人原始样本不在工作区")
+    source = SAMPLES / "IMG_20261116_212648.jpg"
+    main(["convert-vivo", str(source), "--target-nits", "400", "--output", str(tmp_path)])
+    output = tmp_path / "run-001" / "IMG_20261116_212648-UltraHDR-400nit.jpg"
+    report_path = tmp_path / "verification.json"
+    assert main(["verify", str(output), "--json", str(report_path)]) == 0
+    assert json.loads(report_path.read_text(encoding="utf-8"))[0]["hdr_capacity_max"] == pytest.approx(400 / 203, rel=0.001)
 
 
 def test_vivo_path_does_not_contain_nvidia_provenance(tmp_path: Path):

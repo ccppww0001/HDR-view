@@ -10,7 +10,11 @@ from hdrview.color.icc import decode_with_icc
 from hdrview.io.intermediate import write_intermediate
 from hdrview.io.output import create_output_dir
 from hdrview.io.source import assert_original_unchanged, read_source
+from hdrview.mapping import DisplayMapping, map_highlights
+from hdrview.model import HdrImage, SdrImage
 from hdrview.nvidia.postprocess import read_truehdr_output
+from hdrview.nvidia.runtime import TrueHdrParams, run_truehdr
+from hdrview.output.jxr import encode_jxr
 from hdrview.output.ultrahdr import encode_ultrahdr
 from hdrview.vivo.container import inspect_jpeg
 from hdrview.vivo.diagnostics import analyze_file
@@ -44,6 +48,49 @@ def _write_report(report: Path | None, payload: object) -> None:
         print(encoded)
 
 
+def _export_hdr(hdr: HdrImage, sdr: SdrImage, run_dir: Path, stem: str, target_nits: int) -> dict[str, object]:
+    """共享编码出口：HDR400 内容只映射一次，JPEG 与 JPEG XR 使用同一像素。"""
+    if target_nits == 400:
+        content = map_highlights(hdr, DisplayMapping())
+    elif target_nits == 1000:
+        content = hdr
+    else:
+        raise ValueError("输出目标仅支持 400 或 1000 nit")
+    output = run_dir / f"{stem}-UltraHDR-{target_nits}nit.jpg"
+    encoded = encode_ultrahdr(content, sdr, output, target_nits=target_nits)
+    record = {
+        "output": str(output),
+        "target_nits": target_nits,
+        # 内容映射的来源必须来自实际编码对象，而不是根据参数伪造。
+        "display_mapping": content.provenance.get("display_mapping", "none") if target_nits == 400 else "none",
+        "is_ultrahdr": encoded.is_ultrahdr,
+        "hdr_capacity_max": encoded.hdr_capacity_max,
+        "gainmap_size": [encoded.gainmap_width, encoded.gainmap_height],
+    }
+    if target_nits == 400:
+        jxr_path = run_dir / f"{stem}-HDR-400nit.jxr"
+        jxr = encode_jxr(content, jxr_path)
+        # JPEG XR 的固定 scRGB 容量字段不代表现实显示器的绝对物理峰值。
+        jxr.pop("hdr_capacity_max", None)
+        record["jpeg_xr"] = jxr
+    return record
+
+
+def _add_export_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--target-nits", type=int, nargs="+", default=[400, 1000], choices=[400, 1000], help="HDR 目标显示峰值，nit；默认导出 400/1000 两份")
+
+
+def _add_truehdr_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--contrast", type=int, default=100)
+    parser.add_argument("--saturation", type=int, default=100)
+    parser.add_argument("--middle-gray", type=int, default=50)
+    parser.add_argument("--luminance", type=int, default=1000)
+    parser.add_argument("--no-debanding", action="store_false", dest="debanding", help="关闭 NVIDIA TrueHDR 去色带")
+    parser.set_defaults(debanding=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hdrview")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -68,11 +115,12 @@ def main(argv: list[str] | None = None) -> int:
     convert.add_argument("--max-gain-cap", type=float, default=4.5)
     convert.add_argument("--highlight-threshold", type=float, default=0.02)
     convert.add_argument("--target-nits", type=int, nargs="+", default=[400, 1000], help="Ultra HDR 完整应用的显示峰值，nit；默认导出 400/1000 两份")
-    nvidia = subparsers.add_parser("convert-nvidia", help="ComfyUI TrueHDR 中间结果到标准 Ultra HDR")
-    nvidia.add_argument("input", type=Path)
+    nvidia = subparsers.add_parser("convert-nvidia", help="NVIDIA TrueHDR 中间结果到 Ultra HDR 和 JPEG XR")
+    _add_export_options(nvidia)
     nvidia.add_argument("--intermediate", type=Path, required=True)
-    nvidia.add_argument("--output", type=Path)
-    nvidia.add_argument("--target-nits", type=int, nargs="+", default=[400, 1000], help="Ultra HDR 目标显示峰值，nit；默认导出 400/1000 两份")
+    enhance = subparsers.add_parser("enhance-nvidia", help="直接运行 NVIDIA TrueHDR，再输出 Ultra HDR 和 JPEG XR")
+    _add_export_options(enhance)
+    _add_truehdr_options(enhance)
     verify = subparsers.add_parser("verify", help="验证已生成的 Ultra HDR 结构与参考解码")
     verify.add_argument("input", type=Path)
     verify.add_argument("--json", type=Path)
@@ -89,24 +137,50 @@ def main(argv: list[str] | None = None) -> int:
             report = inspect_ultrahdr(path)
             sdr = decode_reference(path, 1.0)
             hdr = decode_reference(path, report.hdr_capacity_max)
-            reports.append({**asdict(report), "output": str(path), "sdr_shape": list(sdr.rgba.shape), "hdr_shape": list(hdr.rgba.shape)})
+            encoded = asdict(report)
+            # 报告只写结构与解码形状，绝不把原始像素数组序列化到 JSON。
+            encoded.pop("base_pixels", None)
+            encoded.pop("gain_pixels", None)
+            reports.append({**encoded, "output": str(path), "sdr_shape": list(sdr.rgba.shape), "hdr_shape": list(hdr.rgba.shape)})
         _write_report(args.json, reports)
         return 0
 
-    if args.command == "convert-nvidia":
+    if args.command in {"convert-nvidia", "enhance-nvidia"}:
         source = read_source(args.input)
-        hdr = read_truehdr_output(args.intermediate, expected_source_sha256=source.sha256)
         sdr = decode_with_icc(source.data)
+        if args.command == "enhance-nvidia":
+            params = TrueHdrParams(args.contrast, args.saturation, args.middle_gray, args.luminance, args.debanding)
+            # 真实 HDR 运行先于 create_output_dir；缺依赖/CUDA 时不能留下空输出目录。
+            hdr = run_truehdr(sdr, params, source.sha256)
+            gpu_executed = True
+            truehdr_params = vars(params)
+        else:
+            hdr = read_truehdr_output(args.intermediate, expected_source_sha256=source.sha256)
+            gpu_executed = False
+            truehdr_params = {name: hdr.provenance[name] for name in ("contrast", "saturation", "middle_gray", "luminance", "debanding") if name in hdr.provenance}
         if hdr.rgba.shape != sdr.rgba.shape:
             raise ValueError("NVIDIA 中间结果与原图尺寸不匹配")
         run_dir = create_output_dir(args.output, sources=[args.input], task="nvidia")
-        outputs = []
-        for nits in args.target_nits:
-            output = run_dir / f"{args.input.stem}-UltraHDR-{nits}nit.jpg"
-            report = encode_ultrahdr(hdr, sdr, output, target_nits=nits)
-            outputs.append({"output": str(output), "target_nits": nits, "hdr_capacity_max": report.hdr_capacity_max, "is_ultrahdr": report.is_ultrahdr})
+        report = {
+            "source": str(args.input),
+            "source_sha256": source.sha256,
+            "pipeline": "nvidia-truehdr",
+            "truehdr_params": truehdr_params,
+            "gpu_executed": gpu_executed,
+        }
+        if gpu_executed:
+            # 真实运行成功后先保留线性 HDR，再派生显示输出；报告路径可机器读取。
+            intermediate = write_intermediate(hdr, run_dir / f"{args.input.stem}-truehdr")
+            report["intermediate"] = {
+                "pixel": str(intermediate.pixel),
+                "metadata": str(intermediate.metadata),
+                "source_sha256": source.sha256,
+            }
+            report["nvidia_vfx"] = hdr.provenance["nvidia-vfx"]
+            report["content_hdr_capacity_max"] = hdr.hdr_capacity_max
+        report["outputs"] = [_export_hdr(hdr, sdr, run_dir, args.input.stem, nits) for nits in args.target_nits]
         assert_original_unchanged(source)
-        _write_report(run_dir / "report.json", {"source": str(args.input), "pipeline": "nvidia-truehdr", "outputs": outputs})
+        _write_report(run_dir / "report.json", report)
         return 0
 
     if args.command == "inspect":
@@ -137,9 +211,7 @@ def main(argv: list[str] | None = None) -> int:
             primary = document.data[: document.vivo.primary_eoi_offset + 2]
             sdr = decode_with_icc(primary)
             for nits in args.target_nits:
-                output = run_dir / f"{path.stem}-UltraHDR-{nits}nit.jpg"
-                encoded = encode_ultrahdr(result.image, sdr, output, target_nits=nits)
-                record.setdefault("outputs", []).append({"output": str(output), "target_nits": nits, "is_ultrahdr": encoded.is_ultrahdr, "hdr_capacity_max": encoded.hdr_capacity_max, "gainmap_size": [encoded.gainmap_width, encoded.gainmap_height]})
+                record.setdefault("outputs", []).append(_export_hdr(result.image, sdr, run_dir, path.stem, nits))
         assert_original_unchanged(source)
         results.append(record)
     _write_report(run_dir / "report.json", results)

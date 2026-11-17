@@ -26,7 +26,7 @@ def hdr_input(tmp_path: Path):
 
 
 def test_bridge_rejects_missing_sidecar_before_running(tmp_path: Path):
-    script = Path("src/hdrview/build/Build-Native.ps1")
+    script = Path("src/hdrview/native/Build-Native.ps1")
     assert script.is_file()
     raw = tmp_path / "input.f16rgba"
     raw.write_bytes(b"pixels")
@@ -53,7 +53,7 @@ def test_bridge_refuses_existing_output(tmp_path: Path, hdr_input):
 
 
 def test_build_script_requires_an_explicit_tool_directory():
-    script = Path("src/hdrview/build/Build-Native.ps1")
+    script = Path("src/hdrview/native/Build-Native.ps1")
     env = dict(os.environ)
     env.pop("HDRVIEW_TOOL_DIR", None)
 

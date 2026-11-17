@@ -1,4 +1,4 @@
-"""ComfyUI TrueHDR 已保存中间结果的输入一致性检查。"""
+"""NVIDIA TrueHDR 已保存中间结果的输入一致性检查。"""
 
 from __future__ import annotations
 

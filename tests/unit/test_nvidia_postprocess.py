@@ -11,7 +11,7 @@ from hdrview.io.intermediate import read_intermediate
 from hdrview.nvidia.postprocess import read_truehdr_output
 
 
-def test_truehdr_pq_output_is_decoded_to_shared_linear_units(tmp_path: Path):
+def test_truehdr_pq_output_is_decoded_to_shared_linear_units():
     # 1.0 PQ = 10000 nit；共享中间单位为 203 nit 的倍数。
     pq = np.array([1.0], dtype=np.float32)
     assert pq_to_linear_bt2020(pq)[0] / 203 == pytest.approx(10000 / 203, rel=1e-6)
@@ -42,18 +42,3 @@ def test_truehdr_intermediate_reads_valid_source(tmp_path: Path):
 
     assert restored.provenance["pipeline"] == "nvidia-truehdr"
     assert restored.color.transfer == "linear"
-
-
-def test_comfy_custom_node_has_no_gpu_success_claim_without_cuda():
-    pytest.importorskip("torch")
-    import torch
-
-    if not torch.cuda.is_available():
-        pytest.skip("没有可用 CUDA；不伪造 NVIDIA TrueHDR 执行")
-
-
-def test_comfy_custom_node_is_registered():
-    source = Path("src/hdrview/comfyui/custom_nodes/hdrview_nodes/__init__.py").read_text(encoding="utf-8")
-    assert "comfy_entrypoint" in source
-    assert "HdrViewPrepareTrueHDR" in source
-    assert "HdrViewSaveLinear" in source
