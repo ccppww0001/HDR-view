@@ -49,28 +49,30 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     inspect = subparsers.add_parser("inspect", help="只读检查 JPEG 结构")
     inspect.add_argument("input", type=Path)
-    inspect.add_argument("--report", type=Path)
+    inspect.add_argument("--output", type=Path)
     analyze = subparsers.add_parser("analyze-vivo", help="只读分析主辅高光关系")
     analyze.add_argument("input", type=Path)
-    analyze.add_argument("--report", type=Path)
+    analyze.add_argument("--output", type=Path)
     reconstruct = subparsers.add_parser("reconstruct-vivo", help="生成研究候选 HDR，不宣称复现 XDR")
     reconstruct.add_argument("input", type=Path)
-    reconstruct.add_argument("--output", type=Path, required=True)
+    reconstruct.add_argument("--output", type=Path)
     reconstruct.add_argument("--model", choices=["additive-residual", "ratio", "short-exposure"], default="additive-residual")
     reconstruct.add_argument("--scale", type=float, default=4.0)
     reconstruct.add_argument("--max-gain-cap", type=float, default=4.5)
     reconstruct.add_argument("--highlight-threshold", type=float, default=0.02)
     convert = subparsers.add_parser("convert-vivo", help="vivo 候选高光到标准 Ultra HDR（观感未验证）")
     convert.add_argument("input", type=Path)
-    convert.add_argument("--output", type=Path, required=True)
+    convert.add_argument("--output", type=Path)
     convert.add_argument("--model", choices=["additive-residual", "ratio", "short-exposure"], default="additive-residual")
     convert.add_argument("--scale", type=float, default=4.0)
     convert.add_argument("--max-gain-cap", type=float, default=4.5)
     convert.add_argument("--highlight-threshold", type=float, default=0.02)
+    convert.add_argument("--target-nits", type=int, nargs="+", default=[400, 1000], help="Ultra HDR 完整应用的显示峰值，nit；默认导出 400/1000 两份")
     nvidia = subparsers.add_parser("convert-nvidia", help="ComfyUI TrueHDR 中间结果到标准 Ultra HDR")
     nvidia.add_argument("input", type=Path)
     nvidia.add_argument("--intermediate", type=Path, required=True)
-    nvidia.add_argument("--output", type=Path, required=True)
+    nvidia.add_argument("--output", type=Path)
+    nvidia.add_argument("--target-nits", type=int, nargs="+", default=[400, 1000], help="Ultra HDR 目标显示峰值，nit；默认导出 400/1000 两份")
     verify = subparsers.add_parser("verify", help="验证已生成的 Ultra HDR 结构与参考解码")
     verify.add_argument("input", type=Path)
     verify.add_argument("--json", type=Path)
@@ -97,19 +99,22 @@ def main(argv: list[str] | None = None) -> int:
         sdr = decode_with_icc(source.data)
         if hdr.rgba.shape != sdr.rgba.shape:
             raise ValueError("NVIDIA 中间结果与原图尺寸不匹配")
-        run_dir = create_output_dir(args.output, sources=[args.input])
-        output = run_dir / f"{args.input.stem}-UltraHDR.jpg"
-        report = encode_ultrahdr(hdr, sdr, output)
+        run_dir = create_output_dir(args.output, sources=[args.input], task="nvidia")
+        outputs = []
+        for nits in args.target_nits:
+            output = run_dir / f"{args.input.stem}-UltraHDR-{nits}nit.jpg"
+            report = encode_ultrahdr(hdr, sdr, output, target_nits=nits)
+            outputs.append({"output": str(output), "target_nits": nits, "hdr_capacity_max": report.hdr_capacity_max, "is_ultrahdr": report.is_ultrahdr})
         assert_original_unchanged(source)
-        _write_report(run_dir / "report.json", {"source": str(args.input), "pipeline": "nvidia-truehdr", "output": str(output), "is_ultrahdr": report.is_ultrahdr})
+        _write_report(run_dir / "report.json", {"source": str(args.input), "pipeline": "nvidia-truehdr", "outputs": outputs})
         return 0
 
     if args.command == "inspect":
         paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
-        _write_report(args.report, [_inspect(path) for path in paths])
+        _write_report(args.output, [_inspect(path) for path in paths])
         return 0
     if args.command == "analyze-vivo":
-        _write_report(args.report, analyze_file(args.input))
+        _write_report(args.output, analyze_file(args.input))
         return 0
 
     paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
@@ -121,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         (path, document, reconstruct_vivo(document, ReconstructionParams(args.model, args.scale, args.max_gain_cap, args.highlight_threshold)))
         for path, document in zip(paths, documents)
     ]
-    run_dir = create_output_dir(args.output, sources=paths)
+    run_dir = create_output_dir(args.output, sources=paths, task="vivo" if args.command == "convert-vivo" else "vivo-intermediate")
     results = []
     for path, document, result in prepared:
         source = read_source(path)
@@ -131,9 +136,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             primary = document.data[: document.vivo.primary_eoi_offset + 2]
             sdr = decode_with_icc(primary)
-            output = run_dir / f"{path.stem}-UltraHDR.jpg"
-            encoded = encode_ultrahdr(result.image, sdr, output)
-            record.update({"output": str(output), "is_ultrahdr": encoded.is_ultrahdr, "gainmap_size": [encoded.gainmap_width, encoded.gainmap_height]})
+            for nits in args.target_nits:
+                output = run_dir / f"{path.stem}-UltraHDR-{nits}nit.jpg"
+                encoded = encode_ultrahdr(result.image, sdr, output, target_nits=nits)
+                record.setdefault("outputs", []).append({"output": str(output), "target_nits": nits, "is_ultrahdr": encoded.is_ultrahdr, "hdr_capacity_max": encoded.hdr_capacity_max, "gainmap_size": [encoded.gainmap_width, encoded.gainmap_height]})
         assert_original_unchanged(source)
         results.append(record)
     _write_report(run_dir / "report.json", results)

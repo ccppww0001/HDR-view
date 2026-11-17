@@ -73,7 +73,8 @@ std::string sha256(const std::vector<uint8_t>& bytes) {
     return output.str();
 }
 
-int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& sdr_path, const fs::path& output) {
+int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& sdr_path, const fs::path& output, float target_nits) {
+    require(target_nits >= 203.0f && target_nits <= 10000.0f, "target peak must be in [203,10000] nits");
     require(!fs::exists(output), "output already exists");
     const auto meta_bytes = read_file(meta_path);
     const std::string meta(meta_bytes.begin(), meta_bytes.end());
@@ -111,6 +112,7 @@ int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& 
     check(uhdr_enc_set_quality(encoder.get(), 95, UHDR_GAIN_MAP_IMG));
     check(uhdr_enc_set_gainmap_scale_factor(encoder.get(), 1));
     check(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), 1));
+    check(uhdr_enc_set_target_display_peak_brightness(encoder.get(), target_nits));
     check(uhdr_encode(encoder.get()));
     auto* encoded = uhdr_get_encoded_stream(encoder.get());
     require(encoded && encoded->data && encoded->data_sz > 0, "encoder returned no JPEG");
@@ -231,9 +233,9 @@ int main(int argc, char** argv) {
             std::cout << "hdrview-ultrahdr bridge; libultrahdr " << UHDR_LIB_VERSION << '\n';
             return 0;
         }
-        if (argc == 10 && std::strcmp(argv[1], "encode") == 0 && std::strcmp(argv[2], "--hdr") == 0 &&
-            std::strcmp(argv[4], "--meta") == 0 && std::strcmp(argv[6], "--sdr") == 0 && std::strcmp(argv[8], "--output") == 0) {
-            return encode(argv[3], argv[5], argv[7], argv[9]);
+        if (argc == 12 && std::strcmp(argv[1], "encode") == 0 && std::strcmp(argv[2], "--hdr") == 0 &&
+            std::strcmp(argv[4], "--meta") == 0 && std::strcmp(argv[6], "--sdr") == 0 && std::strcmp(argv[8], "--output") == 0 && std::strcmp(argv[10], "--target-nits") == 0) {
+            return encode(argv[3], argv[5], argv[7], argv[9], std::stof(argv[11]));
         }
         if (argc == 6 && std::strcmp(argv[1], "inspect") == 0 && std::strcmp(argv[2], "--input") == 0 && std::strcmp(argv[4], "--json") == 0) {
             return inspect(argv[3], argv[5]);

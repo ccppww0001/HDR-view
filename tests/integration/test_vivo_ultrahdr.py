@@ -23,13 +23,13 @@ def test_vivo_candidate_exports_real_ultrahdr_and_preserves_sdr_base(tmp_path: P
     assert main(["convert-vivo", str(source), "--output", str(tmp_path)]) == 0
 
     output_dir = tmp_path / "run-001"
-    output = output_dir / "IMG_20261116_212648-UltraHDR.jpg"
+    output = output_dir / "IMG_20261116_212648-UltraHDR-400nit.jpg"
     report = inspect_ultrahdr(output)
     payload = json.loads((output_dir / "report.json").read_text(encoding="utf-8"))
     assert report.is_ultrahdr
     assert report.width == 4096 and report.height == 3072
     assert report.gainmap_width > 0
-    assert report.hdr_capacity_max > 1
+    assert report.hdr_capacity_max == pytest.approx(400 / 203, rel=0.001)
     assert payload[0]["xdr_appearance_verified"] is False
     assert "未验证" in payload[0]["status"]
     assert source.read_bytes() == before

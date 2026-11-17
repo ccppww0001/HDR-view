@@ -19,7 +19,7 @@
 
 ```powershell
 $env:HDRVIEW_TOOL_DIR = 'C:\Users\N452\AppData\Local\Temp\opencode\hdrview-build'
-pwsh -File scripts/Build-Native.ps1 -Test
+pwsh -File src/hdrview/build/Build-Native.ps1 -Test
 python -m hdrview.cli convert-vivo <原始 Neo9 Pro JPEG> --output <新的临时输出目录>
 ```
 
@@ -36,6 +36,18 @@ python -m hdrview.cli convert-vivo <原始 Neo9 Pro JPEG> --output <新的临时
 - 无受控手机拍屏参考时，vivo 结果只能称为“合理 HDR 重建，手机 XDR 观感未验证”。
 - 原始照片、安装包、生成结果和本地环境均不纳入 Git。
 - 中间 HDR 使用线性光和显示无关元数据，不把 HDR400 的亮度上限写入数据。
+- 所有产品源码统一在 `src/hdrview/`；构建入口位于 `src/hdrview/build/`，原生桥接位于 `src/hdrview/native/`，ComfyUI 节点与工作流位于 `src/hdrview/comfyui/`。
+- 默认输出目录为项目内 `output/<任务>/run-NNN`；原始照片、安装包和输出不纳入 Git。
+
+## Ultra HDR 兼容性与峰值参数
+
+编码器同时写入 ISO 21496-1 与 Ultra HDR XMP（`UHDR_WRITE_ISO=ON`、`UHDR_WRITE_XMP=ON`）。此前仅 ISO 的输出在 Luma 中不能识别；双写后已实测可识别为原生 HDR。Windows Photos 能打开 JPEG 不代表一定应用增益图，官方文档未承诺此格式，需另行实测。
+
+`convert-vivo` 和 `convert-nvidia` 默认各导出 400 与 1000 nit 两份，文件名带 `-400nit`/`-1000nit`。此参数进入官方 `uhdr_enc_set_target_display_peak_brightness`，控制 HDR 容量和完整增益应用，不是全图提亮，也不改变 SDR 基础图。可显式指定一个值：
+
+```powershell
+python -m hdrview.cli convert-vivo <原始 JPEG> --target-nits 400 1000
+```
 
 ## 本地验证环境
 

@@ -22,7 +22,7 @@ LoadImage（项目预先生成的标准 sRGB PNG）
 → HdrViewSaveLinear（PQ → 线性 BT.2020 + sidecar）
 ```
 
-`comfyui/workflows/nvidia_to_hdr.json` 定义该链路；不会把普通 Save Image 或 AVIF 当作 Ultra HDR。手机原始 JPEG 的 Display-P3 必须先由核心 ICC 解码处理，不使用 ComfyUI 默认的 `convert('RGB')` 替代 ICC。
+`src/hdrview/comfyui/workflows/nvidia_to_hdr.json` 定义该链路；不会把普通 Save Image 或 AVIF 当作 Ultra HDR。手机原始 JPEG 的 Display-P3 必须先由核心 ICC 解码处理，不使用 ComfyUI 默认的 `convert('RGB')` 替代 ICC。
 
 ## 当前验证状态
 

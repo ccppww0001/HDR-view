@@ -12,5 +12,5 @@ SHA-256：`7C2B5F02B463CB9E67AD00F24CC504198FFC384D32B3793781038245FB4B9171`
 
 ```powershell
 $env:HDRVIEW_TOOL_DIR = 'C:\Users\N452\AppData\Local\Temp\opencode\hdrview-build'
-pwsh -File scripts/Build-Native.ps1 -Test
+pwsh -File src/hdrview/build/Build-Native.ps1 -Test
 ```

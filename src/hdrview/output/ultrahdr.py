@@ -30,7 +30,7 @@ class EncodeReport:
     gain_pixels: np.ndarray
 
 
-def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path) -> None:
+def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path, target_nits: int = 10000) -> None:
     """API-3 编码；先验证所有输入和输出冲突，再调用本机程序。"""
 
     for path in (executable, hdr, metadata, sdr):
@@ -42,7 +42,7 @@ def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, o
         raise ValueError("Ultra HDR 输出扩展名必须为 .jpg/.jpeg")
     output.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
-        [str(executable), "encode", "--hdr", str(hdr), "--meta", str(metadata), "--sdr", str(sdr), "--output", str(output)],
+        [str(executable), "encode", "--hdr", str(hdr), "--meta", str(metadata), "--sdr", str(sdr), "--output", str(output), "--target-nits", str(target_nits)],
         capture_output=True,
         text=True,
         check=False,
@@ -54,7 +54,7 @@ def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, o
 
 
 def default_bridge() -> Path:
-    return Path(__file__).resolve().parents[3] / "native" / "build" / "Release" / "hdrview-ultrahdr.exe"
+    return Path(__file__).resolve().parents[1] / "native" / "build" / "Release" / "hdrview-ultrahdr.exe"
 
 
 def inspect_ultrahdr(path: Path, workdir: Path | None = None) -> EncodeReport:
@@ -89,8 +89,11 @@ def inspect_ultrahdr(path: Path, workdir: Path | None = None) -> EncodeReport:
         return EncodeReport(output=path, **data, base_pixels=base_pixels, gain_pixels=gain_pixels)
 
 
-def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path) -> EncodeReport:
-    """统一出口：增益完全由官方 HDR/SDR 比值计算，拒绝手工覆盖。"""
+def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path, *, target_nits: int = 10000) -> EncodeReport:
+    """统一出口：增益来自 HDR/SDR，target_nits 控制完整应用的显示容量。"""
+
+    if target_nits < 203 or target_nits > 10000:
+        raise ValueError("Ultra HDR 目标峰值必须在 203–10000 nit")
 
     if hdr.rgba.shape != sdr.rgba.shape:
         raise ValueError("HDR 与 SDR 的尺寸/形状必须一致")
@@ -104,5 +107,5 @@ def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path) -> EncodeReport:
         intermediate = write_intermediate(hdr, root / "hdr")
         source = root / "base.jpg"
         source.write_bytes(sdr.compressed_jpeg)
-        encode_with_bridge(default_bridge(), intermediate.pixel, intermediate.metadata, source, output)
+        encode_with_bridge(default_bridge(), intermediate.pixel, intermediate.metadata, source, output, target_nits)
         return inspect_ultrahdr(output, root)

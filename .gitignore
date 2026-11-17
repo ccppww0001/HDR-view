@@ -17,8 +17,8 @@ __pycache__/
 
 # 原生依赖、编译与输出
 .tools/
-native/build/
-native/_deps/
+src/hdrview/native/build/
+src/hdrview/native/_deps/
 build/
 dist/
 *.egg-info/

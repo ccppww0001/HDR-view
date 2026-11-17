@@ -25,8 +25,11 @@ def _resolved(path: Path) -> Path:
     return path.resolve(strict=False)
 
 
-def create_output_dir(root: Path, *, sources: list[Path]) -> Path:
-    """在独立根目录内创建新的 run-NNN，永不复用已有输出目录。"""
+def create_output_dir(root: Path | None = None, *, sources: list[Path], task: str = "general") -> Path:
+    """默认进入项目 output/<task>/run-NNN，永不复用已有输出目录。"""
+
+    if root is None:
+        root = Path(__file__).resolve().parents[3] / "output" / task
 
     if root.exists() and (_is_link(root) or not root.is_dir()):
         raise OutputConflictError(f"输出根目录不能是链接或普通文件：{root}")

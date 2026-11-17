@@ -29,7 +29,8 @@ def _validate(image: HdrImage) -> tuple[int, int, np.ndarray]:
         raise InvalidIntermediateError("中间 HDR 必须为 BT.2020 linear")
     if rgba.ndim != 3 or rgba.shape[2] != 4 or rgba.shape[0] < 1 or rgba.shape[1] < 1:
         raise InvalidIntermediateError("HDR 像素必须是非空 H×W×4 RGBA")
-    if not np.all(np.isfinite(rgba)) or np.any(rgba < 0) or np.any(rgba > 65504):
+    # 色域矩阵可因数值/超色域舍入产生极小负值；仅允许 -0.01 的明确容差，禁止真正负亮度。
+    if not np.all(np.isfinite(rgba)) or np.any(rgba < -0.01) or np.any(rgba > 65504):
         raise InvalidIntermediateError("HDR 像素必须有限、非负且不超过 float16 上限 65504")
     if not np.array_equal(rgba[..., 3], np.ones(rgba.shape[:2], dtype=np.float32)):
         raise InvalidIntermediateError("照片中间表示仅支持 alpha=1")

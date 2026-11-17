@@ -53,7 +53,7 @@ def test_comfy_custom_node_has_no_gpu_success_claim_without_cuda():
 
 
 def test_comfy_custom_node_is_registered():
-    source = Path("comfyui/custom_nodes/hdrview_nodes/__init__.py").read_text(encoding="utf-8")
+    source = Path("src/hdrview/comfyui/custom_nodes/hdrview_nodes/__init__.py").read_text(encoding="utf-8")
     assert "comfy_entrypoint" in source
     assert "HdrViewPrepareTrueHDR" in source
     assert "HdrViewSaveLinear" in source

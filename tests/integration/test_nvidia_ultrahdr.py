@@ -33,7 +33,7 @@ def test_nvidia_intermediate_exports_standard_ultrahdr(tmp_path: Path):
 
     assert main(["convert-nvidia", str(source), "--intermediate", str(intermediate.stem), "--output", str(tmp_path / "out")]) == 0
 
-    result = inspect_ultrahdr(tmp_path / "out" / "run-001" / f"{source.stem}-UltraHDR.jpg")
+    result = inspect_ultrahdr(tmp_path / "out" / "run-001" / f"{source.stem}-UltraHDR-400nit.jpg")
     assert result.is_ultrahdr
     assert result.width == 4096
     assert result.gainmap_width > 0
