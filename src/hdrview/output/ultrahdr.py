@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import numpy as np
 import json
 import subprocess
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ class EncodeReport:
     gainmap_height: int
     hdr_capacity_max: float
     hdr_capacity_min: float
+    base_pixels: np.ndarray
+    gain_pixels: np.ndarray
 
 
 def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path) -> None:
@@ -79,7 +82,11 @@ def inspect_ultrahdr(path: Path, workdir: Path | None = None) -> EncodeReport:
                     raise RuntimeError("Ultra HDR 图像尺寸无效")
         if not data["is_ultrahdr"] or data["gainmap_width"] <= 0:
             raise RuntimeError("官方解码器未确认完整 Ultra HDR")
-        return EncodeReport(output=path, **data)
+        with Image.open(base) as image:
+            base_pixels = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+        with Image.open(gain) as image:
+            gain_pixels = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+        return EncodeReport(output=path, **data, base_pixels=base_pixels, gain_pixels=gain_pixels)
 
 
 def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path) -> EncodeReport:

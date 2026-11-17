@@ -24,16 +24,20 @@ class TrueHdrParams:
             raise ValueError("TrueHDR 对比/饱和/中灰超出官方范围")
 
 
-def build_workflow(input_png: Path, params: TrueHdrParams) -> dict:
+def build_workflow(input_png: Path, params: TrueHdrParams, *, output_stem: Path, source_sha256: str) -> dict:
     """节点 ID 稳定，真实链路不能靠未连接的文件说明替代。"""
 
     params.validate()
+    if len(source_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in source_sha256):
+        raise ValueError("工作流必须携带原始图片的 SHA-256")
+    if not output_stem.name:
+        raise ValueError("必须提供 HDR 中间结果的输出 stem")
     return {
         "nodes": [
-            {"id": 1, "type": "LoadImage", "widgets_values": {"image": input_png.name, "upload": "image"}},
-            {"id": 2, "type": "HdrViewPrepareTrueHDR", "inputs": [{"name": "images", "type": "IMAGE", "link": 1}], "widgets_values": {}},
-            {"id": 3, "type": "RTXTrueHDR", "inputs": [{"name": "images", "type": "IMAGE", "link": 2}], "widgets_values": vars(params)},
-            {"id": 4, "type": "HdrViewSaveLinear", "inputs": [{"name": "images", "type": "IMAGE", "link": 3}], "widgets_values": {}},
+            {"id": 1, "type": "LoadImage", "widgets_values": [input_png.name, "image"]},
+            {"id": 2, "type": "HdrViewPrepareTrueHDR", "inputs": [{"name": "images", "type": "IMAGE", "link": 1}], "widgets_values": []},
+            {"id": 3, "type": "RTXTrueHDR", "inputs": [{"name": "images", "type": "IMAGE", "link": 2}], "widgets_values": [params.contrast, params.saturation, params.middle_gray, params.luminance, params.debanding, params.output_colorspace]},
+            {"id": 4, "type": "HdrViewSaveLinear", "inputs": [{"name": "images", "type": "IMAGE", "link": 3}], "widgets_values": [str(output_stem), source_sha256, params.luminance]},
         ],
         "links": [[1, 1, 0, 2, 0, "IMAGE"], [2, 2, 0, 3, 0, "IMAGE"], [3, 3, 0, 4, 0, "IMAGE"]],
     }

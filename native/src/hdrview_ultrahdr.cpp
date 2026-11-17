@@ -3,6 +3,8 @@
 
 #include <ultrahdr_api.h>
 
+#include <array>
+#include <DirectXPackedVector.h>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
@@ -14,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cmath>
 #include <windows.h>
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
@@ -130,6 +133,7 @@ int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& 
 }
 
 int inspect(const fs::path& input, const fs::path& report) {
+    require(!fs::exists(report), "inspect report already exists");
     const auto bytes = read_file(input);
     Decoder decoder(uhdr_create_decoder(), &uhdr_release_decoder);
     require(decoder != nullptr, "cannot allocate decoder");
@@ -157,12 +161,14 @@ int inspect(const fs::path& input, const fs::path& report) {
          << "  \"hdr_capacity_max\": " << (metadata ? metadata->hdr_capacity_max : 0) << "\n}\n";
     const fs::path base_path = report.wstring() + L".base.jpg";
     const fs::path gain_path = report.wstring() + L".gain.jpg";
+    require(!fs::exists(base_path) && !fs::exists(gain_path), "inspect image output already exists");
     std::ofstream(base_path, std::ios::binary).write(static_cast<const char*>(base->data), base->data_sz);
     std::ofstream(gain_path, std::ios::binary).write(static_cast<const char*>(gain->data), gain->data_sz);
     return 0;
 }
 
 int decode(const fs::path& input, const fs::path& raw, const fs::path& metadata, float display_boost) {
+    require(!fs::exists(raw) && !fs::exists(metadata), "decode output already exists");
     require(display_boost >= 1.0f, "display boost must be >= 1");
     const auto bytes = read_file(input);
     Decoder decoder(uhdr_create_decoder(), &uhdr_release_decoder);
@@ -182,7 +188,33 @@ int decode(const fs::path& input, const fs::path& raw, const fs::path& metadata,
     auto* decoded = uhdr_get_decoded_image(decoder.get());
     require(decoded && decoded->planes[0], "decode returned no pixels");
     const size_t length = uint64_t(decoded->w) * decoded->h * 8;
-    std::ofstream(raw, std::ios::binary).write(static_cast<const char*>(decoded->planes[0]), length);
+    std::vector<uint8_t> normalized(length);
+    const auto* half_input = static_cast<const uint16_t*>(decoded->planes[0]);
+    auto* half_output = reinterpret_cast<uint16_t*>(normalized.data());
+    for (size_t pixel = 0; pixel < uint64_t(decoded->w) * decoded->h; ++pixel) {
+        for (int channel = 0; channel < 3; ++channel) {
+            half_output[pixel * 4 + channel] = half_input[pixel * 4 + channel];
+        }
+        half_output[pixel * 4 + 3] = half_input[pixel * 4 + 3];
+    }
+    // 参考解码可能沿用基础图的 P3/709 色域；统一转换到 BT.2020 后才允许写 sidecar。
+    const auto convert = [](float r, float g, float b, const std::array<float, 9>& matrix) {
+        return std::array<float, 3>{matrix[0] * r + matrix[1] * g + matrix[2] * b,
+                                    matrix[3] * r + matrix[4] * g + matrix[5] * b,
+                                    matrix[6] * r + matrix[7] * g + matrix[8] * b};
+    };
+    const std::array<float, 9> p3_to_2020{0.753833f, 0.198597f, 0.04757f, 0.045744f, 0.941777f, 0.012479f, -0.00121f, 0.017601f, 0.983608f};
+    const std::array<float, 9> rec709_to_2020{0.627404f, 0.329282f, 0.043314f, 0.069097f, 0.919541f, 0.011362f, 0.016392f, 0.088013f, 0.895595f};
+    if (decoded->cg == UHDR_CG_DISPLAY_P3 || decoded->cg == UHDR_CG_BT_709) {
+        const auto& matrix = decoded->cg == UHDR_CG_DISPLAY_P3 ? p3_to_2020 : rec709_to_2020;
+        for (size_t pixel = 0; pixel < uint64_t(decoded->w) * decoded->h; ++pixel) {
+            const auto rgb = convert(DirectX::PackedVector::XMConvertHalfToFloat(half_input[pixel * 4]), DirectX::PackedVector::XMConvertHalfToFloat(half_input[pixel * 4 + 1]), DirectX::PackedVector::XMConvertHalfToFloat(half_input[pixel * 4 + 2]), matrix);
+            for (int channel = 0; channel < 3; ++channel) half_output[pixel * 4 + channel] = DirectX::PackedVector::XMConvertFloatToHalf(rgb[channel]);
+        }
+    } else {
+        require(decoded->cg == UHDR_CG_BT_2100 || decoded->cg == UHDR_CG_UNSPECIFIED, "unsupported decoded gamut");
+    }
+    std::ofstream(raw, std::ios::binary).write(reinterpret_cast<const char*>(normalized.data()), length);
     std::ofstream json(metadata);
     json << "{\"schema\":1,\"width\":" << decoded->w << ",\"height\":" << decoded->h
          << ",\"channels\":4,\"pixel_format\":\"rgba-float16\",\"byte_stride\":" << decoded->w * 8

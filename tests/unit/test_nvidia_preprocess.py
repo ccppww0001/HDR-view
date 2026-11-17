@@ -31,15 +31,16 @@ def test_truehdr_input_rejects_alpha_or_wrong_shape():
 
 
 def test_workflow_connects_custom_preprocess_official_rtx_and_linear_save():
-    workflow = build_workflow(Path("input.png"), TrueHdrParams())
+    workflow = build_workflow(Path("input.png"), TrueHdrParams(), output_stem=Path("hdr-output"), source_sha256="a" * 64)
     nodes = {node["type"]: node for node in workflow["nodes"]}
 
     assert "HdrViewPrepareTrueHDR" in nodes
     assert "RTXTrueHDR" in nodes
     assert "HdrViewSaveLinear" in nodes
-    assert nodes["RTXTrueHDR"]["widgets_values"]["output_colorspace"] == "HDR PQ"
-    assert nodes["RTXTrueHDR"]["widgets_values"]["debanding"] is True
-    assert nodes["RTXTrueHDR"]["widgets_values"]["luminance"] == 400
+    assert nodes["RTXTrueHDR"]["widgets_values"][5] == "HDR PQ"
+    assert nodes["RTXTrueHDR"]["widgets_values"][4] is True
+    assert nodes["RTXTrueHDR"]["widgets_values"][3] == 400
+    assert nodes["HdrViewSaveLinear"]["widgets_values"] == ["hdr-output", "a" * 64, 400]
     assert "SaveImage" not in nodes
     links = workflow["links"]
     assert any(link[1] == nodes["HdrViewPrepareTrueHDR"]["id"] and link[3] == nodes["RTXTrueHDR"]["id"] for link in links)
@@ -48,6 +49,6 @@ def test_workflow_connects_custom_preprocess_official_rtx_and_linear_save():
 
 def test_workflow_rejects_hlg_and_invalid_parameters():
     with pytest.raises(ValueError):
-        build_workflow(Path("input.png"), TrueHdrParams(output_colorspace="HDR"))
+        build_workflow(Path("input.png"), TrueHdrParams(output_colorspace="HDR"), output_stem=Path("hdr"), source_sha256="a" * 64)
     with pytest.raises(ValueError):
         TrueHdrParams(luminance=399).validate()

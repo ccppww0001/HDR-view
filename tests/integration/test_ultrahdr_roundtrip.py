@@ -44,15 +44,10 @@ def test_known_hdr_becomes_standard_ultrahdr_with_sdr_base(tmp_path: Path, known
     data = output.read_bytes()
     assert b"hdrgm" in data or b"urn:iso:std:iso:ts:21496" in data
     assert b"MPF" in data
-    report_path = None
-    # 独立检查显式使用临时目录，避免输出中混入提取的 JPEG。
-    from hdrview.output.ultrahdr import inspect_ultrahdr
-    inspect_ultrahdr(output)
-    # 容器重排是允许的；比较解码像素而非原始 JPEG 字节。
-    extracted_base = sdr.compressed_jpeg
+    # 使用官方检查返回的实际基础图，而不是原图与自身比较。
+    report = inspect_ultrahdr(output)
     original = Image.open(BytesIO(sdr.compressed_jpeg)).convert("RGB")
-    repacked = Image.open(BytesIO(extracted_base)).convert("RGB")
-    assert np.max(np.abs(np.asarray(original, dtype=np.int16) - np.asarray(repacked, dtype=np.int16))) <= 1
+    assert np.max(np.abs(np.asarray(original, dtype=np.int16) - report.base_pixels.astype(np.int16))) <= 1
     with Image.open(output) as base:
         assert base.size == (64, 64)
         assert np.asarray(base)[0, 0, 0] == pytest.approx(64, abs=2)
