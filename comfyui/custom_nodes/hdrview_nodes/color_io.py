@@ -76,4 +76,4 @@ if io is not None:
                 if index:
                     stem = stem.with_name(stem.name + f"-{index:03d}")
                 write_intermediate(hdr, stem)
-            return io.NodeOutput(None)
+            return None

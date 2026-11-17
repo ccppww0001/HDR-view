@@ -207,7 +207,7 @@ Run: `python -m pytest tests/unit/test_color.py tests/unit/test_intermediate.py 
 ### Task 5: 固定官方 libultrahdr 的 Windows 构建
 
 **Files:**
-- Create: `native/README.md`, `native/cmake/FetchUltrahdr.cmake`, `native/src/hdrview_ultrahdr.cpp`, `native/CMakeLists.txt`, `scripts/Build-Native.ps1`
+- Create: `native/README.md`, `native/CMakeLists.txt`, `native/src/hdrview_ultrahdr.cpp`, `scripts/Build-Native.ps1`
 - Test: `tests/integration/test_native_bridge.py`
 
 **Interfaces:**
@@ -417,7 +417,7 @@ P3 输入必须经过 ICC；prepare 输出 Rec.709/D65 gamma 2.2；工作流必�
 
 - [ ] **Step 2: 实现 ICC 预处理和工作流生成**
 
-先生成标准 sRGB PNG 作为 ComfyUI 输入，再由实际连接的 `HdrViewPrepareTrueHDR` 节点转成 gamma 2.2；不能只在外部脚本生成gamma 2.2 文件后又让 LoadImage 改解释。节点复用 Task 4 的共享转换，固定 ComfyUI ≥0.35.0、VFX Nodes 提交 `38d790de…`、Python 3.12、PyTorch cu130+、NVIDIA 驱动≥570.65。`HdrViewSaveLinear` 在本任务只定义接口，Task 12 完成实现。
+先生成标准 sRGB PNG 作为 ComfyUI 输入，再由实际连接的 `HdrViewPrepareTrueHDR` 节点转成 gamma 2.2；不能只在外部脚本生成 gamma 2.2 文件后又让 LoadImage 改解释。节点复用 Task 4 的共享转换，固定 ComfyUI ≥0.35.0、VFX Nodes 提交 `38d790de…`、Python 3.12、PyTorch cu130+、NVIDIA 驱动≥570.65。`HdrViewSaveLinear` 在本任务只定义接口，Task 12 完成实现。
 
 - [ ] **Step 3: 测试和文档**
 

@@ -71,7 +71,25 @@ def main(argv: list[str] | None = None) -> int:
     nvidia.add_argument("input", type=Path)
     nvidia.add_argument("--intermediate", type=Path, required=True)
     nvidia.add_argument("--output", type=Path, required=True)
+    verify = subparsers.add_parser("verify", help="验证已生成的 Ultra HDR 结构与参考解码")
+    verify.add_argument("input", type=Path)
+    verify.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
+
+    if args.command == "verify":
+        from dataclasses import asdict
+        from hdrview.output.ultrahdr import inspect_ultrahdr
+        from hdrview.verify.roundtrip import decode_reference
+
+        paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
+        reports = []
+        for path in paths:
+            report = inspect_ultrahdr(path)
+            sdr = decode_reference(path, 1.0)
+            hdr = decode_reference(path, report.hdr_capacity_max)
+            reports.append({**asdict(report), "output": str(path), "sdr_shape": list(sdr.rgba.shape), "hdr_shape": list(hdr.rgba.shape)})
+        _write_report(args.json, reports)
+        return 0
 
     if args.command == "convert-nvidia":
         source = read_source(args.input)

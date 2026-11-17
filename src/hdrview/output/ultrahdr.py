@@ -1,0 +1,101 @@
+"""调用本地官方 libultrahdr 薄桥接，不在 Python 中手写 MPF。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import json
+import subprocess
+from dataclasses import dataclass
+import tempfile
+
+from PIL import Image
+
+from hdrview.io.intermediate import write_intermediate
+from hdrview.io.intermediate import read_intermediate
+from hdrview.model import HdrImage, SdrImage
+
+
+@dataclass(frozen=True)
+class EncodeReport:
+    output: Path
+    is_ultrahdr: bool
+    width: int
+    height: int
+    gainmap_width: int
+    gainmap_height: int
+    hdr_capacity_max: float
+    hdr_capacity_min: float
+
+
+def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path) -> None:
+    """API-3 编码；先验证所有输入和输出冲突，再调用本机程序。"""
+
+    for path in (executable, hdr, metadata, sdr):
+        if not path.is_file():
+            raise FileNotFoundError(path)
+    if output.exists():
+        raise FileExistsError(f"Ultra HDR 输出已存在：{output}")
+    if output.suffix.lower() not in (".jpg", ".jpeg"):
+        raise ValueError("Ultra HDR 输出扩展名必须为 .jpg/.jpeg")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [str(executable), "encode", "--hdr", str(hdr), "--meta", str(metadata), "--sdr", str(sdr), "--output", str(output)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"libultrahdr 编码失败（{result.returncode}）：{result.stderr.strip()}")
+    if not output.is_file() or output.stat().st_size == 0:
+        raise RuntimeError("libultrahdr 未生成非空输出")
+
+
+def default_bridge() -> Path:
+    return Path(__file__).resolve().parents[3] / "native" / "build" / "Release" / "hdrview-ultrahdr.exe"
+
+
+def inspect_ultrahdr(path: Path, workdir: Path | None = None) -> EncodeReport:
+    """使用官方 probe 和 base/gain 图像检查，而非只看一个 XMP 字符串。"""
+
+    with tempfile.TemporaryDirectory(prefix="hdrview-inspect-") as temporary:
+        if workdir is None:
+            workdir = Path(temporary)
+        report_path = workdir / (path.stem + "-inspect.json")
+        if report_path.exists():
+            raise FileExistsError(report_path)
+        result = subprocess.run(
+            [str(default_bridge()), "inspect", "--input", str(path), "--json", str(report_path)],
+            capture_output=True, text=True, check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Ultra HDR 检查失败：{result.stderr.strip()}")
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+        base = report_path.with_name(report_path.name + ".base.jpg")
+        gain = report_path.with_name(report_path.name + ".gain.jpg")
+        for jpeg in (base, gain):
+            with Image.open(jpeg) as image:
+                image.load()
+                if image.width < 1 or image.height < 1:
+                    raise RuntimeError("Ultra HDR 图像尺寸无效")
+        if not data["is_ultrahdr"] or data["gainmap_width"] <= 0:
+            raise RuntimeError("官方解码器未确认完整 Ultra HDR")
+        return EncodeReport(output=path, **data)
+
+
+def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path) -> EncodeReport:
+    """统一出口：增益完全由官方 HDR/SDR 比值计算，拒绝手工覆盖。"""
+
+    if hdr.rgba.shape != sdr.rgba.shape:
+        raise ValueError("HDR 与 SDR 的尺寸/形状必须一致")
+    if not sdr.compressed_jpeg:
+        raise ValueError("API-3 需要原始压缩 SDR JPEG")
+    # 在写入磁盘前完成中间模型验证，错误数据不能进入 C++ 桥接。
+    from hdrview.io.intermediate import _validate
+    _validate(hdr)
+    with tempfile.TemporaryDirectory(prefix="hdrview-encode-") as directory:
+        root = Path(directory)
+        intermediate = write_intermediate(hdr, root / "hdr")
+        source = root / "base.jpg"
+        source.write_bytes(sdr.compressed_jpeg)
+        encode_with_bridge(default_bridge(), intermediate.pixel, intermediate.metadata, source, output)
+        return inspect_ultrahdr(output, root)

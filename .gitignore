@@ -24,9 +24,9 @@ dist/
 *.egg-info/
 
 # HDR 实验产物：不得污染仓库
-output/
-outputs/
-artifacts/
+/output/
+/outputs/
+/artifacts/
 *.vivohdr.jpg
 *.vivo-hdr.jpg
 *.f16rgba

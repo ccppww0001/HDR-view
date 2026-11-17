@@ -50,3 +50,10 @@ def test_comfy_custom_node_has_no_gpu_success_claim_without_cuda():
 
     if not torch.cuda.is_available():
         pytest.skip("没有可用 CUDA；不伪造 NVIDIA TrueHDR 执行")
+
+
+def test_comfy_custom_node_is_registered():
+    source = Path("comfyui/custom_nodes/hdrview_nodes/__init__.py").read_text(encoding="utf-8")
+    assert "comfy_entrypoint" in source
+    assert "HdrViewPrepareTrueHDR" in source
+    assert "HdrViewSaveLinear" in source
