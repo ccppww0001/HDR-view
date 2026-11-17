@@ -9,7 +9,21 @@
 
 ## 当前状态
 
-**项目处于初始骨架阶段，尚不能执行 HDR 转换。** 当前仅实现只读源文件快照、SHA-256 校验和防覆盖输出目录。项目版本 `0.0.0` 表示尚未发布任何转换能力。
+**当前处于研究实现阶段。** 已实现只读源文件快照、SHA-256 校验、防覆盖输出、Neo9 Pro 私有 trailer/JSON/辅助 JPEG 解析、Display-P3 ICC 色彩转换、线性 BT.2020 中间表示，以及官方 `libultrahdr` 的 Ultra HDR 编码/参考解码。
+
+`convert-vivo` 当前输出的是**研究候选的合理 HDR 重建，手机 XDR 观感未验证**。NVIDIA/ComfyUI 管线尚未完成安装和真实执行；Luma 尚未进行本机 HDR 显示验收。项目版本 `0.0.0` 表示尚未发布稳定转换能力。
+
+## 当前 vivo 研究用法
+
+先完成固定依赖构建，再执行：
+
+```powershell
+$env:HDRVIEW_TOOL_DIR = 'C:\Users\N452\AppData\Local\Temp\opencode\hdrview-build'
+pwsh -File scripts/Build-Native.ps1 -Test
+python -m hdrview.cli convert-vivo <原始 Neo9 Pro JPEG> --output <新的临时输出目录>
+```
+
+输出目录中生成 `*-UltraHDR.jpg` 和 `report.json`。报告必须保留 `xdr_appearance_verified=false`；不要将默认候选参数理解为 vivo 官方算法参数。`inspect`、`analyze-vivo`、`reconstruct-vivo` 分别用于结构检查、主辅高光诊断和中间结果生成。
 
 ## 设计与计划
 
