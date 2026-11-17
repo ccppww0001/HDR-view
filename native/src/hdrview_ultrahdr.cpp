@@ -99,7 +99,7 @@ int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& 
     uhdr_compressed_image_t sdr{};
     sdr.data = const_cast<uint8_t*>(sdr_bytes.data());
     sdr.data_sz = sdr.capacity = sdr_bytes.size();
-    sdr.cg = UHDR_CG_BT_709;
+    sdr.cg = UHDR_CG_UNSPECIFIED;
     sdr.ct = UHDR_CT_SRGB;
     sdr.range = UHDR_CR_FULL_RANGE;
     check(uhdr_enc_set_raw_image(encoder.get(), &hdr, UHDR_HDR_IMG));

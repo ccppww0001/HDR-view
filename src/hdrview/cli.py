@@ -6,8 +6,11 @@ import argparse
 import json
 from pathlib import Path
 
+from hdrview.color.icc import decode_with_icc
 from hdrview.io.intermediate import write_intermediate
 from hdrview.io.output import create_output_dir
+from hdrview.io.source import assert_original_unchanged, read_source
+from hdrview.output.ultrahdr import encode_ultrahdr
 from hdrview.vivo.container import inspect_jpeg
 from hdrview.vivo.diagnostics import analyze_file
 from hdrview.vivo.fuse import reconstruct_vivo
@@ -56,6 +59,13 @@ def main(argv: list[str] | None = None) -> int:
     reconstruct.add_argument("--scale", type=float, default=4.0)
     reconstruct.add_argument("--max-gain-cap", type=float, default=4.5)
     reconstruct.add_argument("--highlight-threshold", type=float, default=0.02)
+    convert = subparsers.add_parser("convert-vivo", help="vivo 候选高光到标准 Ultra HDR（观感未验证）")
+    convert.add_argument("input", type=Path)
+    convert.add_argument("--output", type=Path, required=True)
+    convert.add_argument("--model", choices=["additive-residual", "ratio", "short-exposure"], default="additive-residual")
+    convert.add_argument("--scale", type=float, default=4.0)
+    convert.add_argument("--max-gain-cap", type=float, default=4.5)
+    convert.add_argument("--highlight-threshold", type=float, default=0.02)
     args = parser.parse_args(argv)
 
     if args.command == "inspect":
@@ -67,13 +77,29 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
+    if not paths:
+        raise FileNotFoundError("没有可处理的 JPEG 输入")
+    documents = [inspect_jpeg(path) for path in paths]
+    # 先完成结构与候选重建，失败时不创建任何输出目录。
+    prepared = [
+        (path, document, reconstruct_vivo(document, ReconstructionParams(args.model, args.scale, args.max_gain_cap, args.highlight_threshold)))
+        for path, document in zip(paths, documents)
+    ]
     run_dir = create_output_dir(args.output, sources=paths)
-    params = ReconstructionParams(args.model, args.scale, args.max_gain_cap, args.highlight_threshold)
     results = []
-    for path in paths:
-        result = reconstruct_vivo(inspect_jpeg(path), params)
-        write_intermediate(result.image, run_dir / path.stem)
-        results.append({"source": str(path), **result.diagnostics})
+    for path, document, result in prepared:
+        source = read_source(path)
+        record = {"source": str(path), **result.diagnostics, **result.image.provenance}
+        if args.command == "reconstruct-vivo":
+            write_intermediate(result.image, run_dir / path.stem)
+        else:
+            primary = document.data[: document.vivo.primary_eoi_offset + 2]
+            sdr = decode_with_icc(primary)
+            output = run_dir / f"{path.stem}-UltraHDR.jpg"
+            encoded = encode_ultrahdr(result.image, sdr, output)
+            record.update({"output": str(output), "is_ultrahdr": encoded.is_ultrahdr, "gainmap_size": [encoded.gainmap_width, encoded.gainmap_height]})
+        assert_original_unchanged(source)
+        results.append(record)
     _write_report(run_dir / "report.json", results)
     return 0
 
