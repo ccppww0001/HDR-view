@@ -78,7 +78,11 @@ def test_output_rejects_symlinked_root(tmp_path: Path):
     if os.name == "nt":
         import _winapi
 
-        _winapi.CreateJunction(str(real_output), str(linked_output))
+        try:
+            _winapi.CreateJunction(str(real_output), str(linked_output))
+        except PermissionError:
+            # 受限执行环境可能拒绝创建联接，此时不能实际验证联接路径。
+            pytest.skip("当前 Windows 执行环境未授予目录联接创建权限")
     else:
         linked_output.symlink_to(real_output, target_is_directory=True)
 

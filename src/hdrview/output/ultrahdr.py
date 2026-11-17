@@ -12,8 +12,9 @@ import tempfile
 from PIL import Image
 
 from hdrview.io.intermediate import write_intermediate
-from hdrview.io.intermediate import read_intermediate
 from hdrview.model import HdrImage, SdrImage
+
+DEFAULT_TARGET_NITS = 1000
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class EncodeReport:
     gain_pixels: np.ndarray
 
 
-def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path, target_nits: int = 10000) -> None:
+def encode_with_bridge(executable: Path, hdr: Path, metadata: Path, sdr: Path, output: Path, target_nits: int = DEFAULT_TARGET_NITS) -> None:
     """API-3 编码；先验证所有输入和输出冲突，再调用本机程序。"""
 
     for path in (executable, hdr, metadata, sdr):
@@ -89,7 +90,7 @@ def inspect_ultrahdr(path: Path, workdir: Path | None = None) -> EncodeReport:
         return EncodeReport(output=path, **data, base_pixels=base_pixels, gain_pixels=gain_pixels)
 
 
-def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path, *, target_nits: int = 10000) -> EncodeReport:
+def encode_ultrahdr(hdr: HdrImage, sdr: SdrImage, output: Path, *, target_nits: int = DEFAULT_TARGET_NITS) -> EncodeReport:
     """统一出口：增益来自 HDR/SDR，target_nits 控制完整应用的显示容量。"""
 
     if target_nits < 203 or target_nits > 10000:

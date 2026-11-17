@@ -3,6 +3,9 @@ param(
     [string]$ToolDirectory = $env:HDRVIEW_TOOL_DIR
 )
 $ErrorActionPreference = 'Stop'
+# 让命令行调用者以 UTF-8 读取中文构建与错误信息，不依赖系统区域设置。
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::OutputEncoding = $OutputEncoding
 if (!$ToolDirectory) { throw '请通过 HDRVIEW_TOOL_DIR 或 -ToolDirectory 指定临时/忽略的构建工具目录' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..')).Path
 # native/ 是唯一构建入口；构建产物继续留在已被忽略的 native/build。

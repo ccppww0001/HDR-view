@@ -40,7 +40,7 @@ def test_known_hdr_becomes_standard_ultrahdr_with_sdr_base(tmp_path: Path, known
     assert report.is_ultrahdr is True
     assert report.width == 64 and report.height == 64
     assert report.gainmap_width > 0 and report.gainmap_height > 0
-    assert report.hdr_capacity_max > 1
+    assert report.hdr_capacity_max == pytest.approx(1000 / 203, rel=0.001)
     data = output.read_bytes()
     assert b"hdrgm" in data or b"urn:iso:std:iso:ts:21496" in data
     assert b"MPF" in data
@@ -82,5 +82,5 @@ def test_manual_gainmap_metadata_cannot_override_actual_ratio(tmp_path: Path, kn
     hdr.provenance["gainmap_max_override"] = 1.0
     control = encode_ultrahdr(hdr, sdr, tmp_path / "control.jpg")
 
-    # 官方容量可因线性输入默认 10000 nit 而大于 4；伪字段不能影响它。
+    # 默认目标为 1000 尼特；来源中的伪字段不能覆盖官方容量。
     assert overridden.hdr_capacity_max == control.hdr_capacity_max

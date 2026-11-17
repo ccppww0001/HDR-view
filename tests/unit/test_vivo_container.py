@@ -91,6 +91,24 @@ def test_trailer_returns_none_for_plain_sdr_jpeg():
     assert locate_vivo_trailer(synthetic_jpeg()) is None
 
 
+def test_trailer_accepts_single_nul_padding_with_original_offsets():
+    auxiliary = synthetic_jpeg()
+    primary = synthetic_jpeg()
+    data = primary + b"\x00" + vivo_trailer(auxiliary)
+
+    located = locate_vivo_trailer(data)
+
+    assert located is not None
+    assert located.primary_eoi_offset == len(primary) - 2
+    assert located.data_offset == len(primary) + 1 + len(b"streamdata")
+    assert data[located.data_offset : located.info_offset] == auxiliary
+    assert located.data_length == len(auxiliary)
+
+
+def test_trailer_does_not_accept_arbitrary_gap_before_streamdata():
+    assert locate_vivo_trailer(synthetic_jpeg(trailer=b"\x00\x00" + vivo_trailer(synthetic_jpeg()))) is None
+
+
 def test_trailer_rejects_invalid_auxiliary_jpeg():
     with pytest.raises(InvalidJpegError):
         locate_vivo_trailer(synthetic_jpeg(trailer=vivo_trailer(b"not-jpeg")))

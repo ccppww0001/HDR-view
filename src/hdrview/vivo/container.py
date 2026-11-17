@@ -79,13 +79,17 @@ def locate_vivo_trailer(data: bytes) -> VivoTrailer | None:
     不把尾部最后一个 FFD9 当主图 EOI，因为 streaminfo 中也可能出现该字节。
     """
 
-    primary_eoi = data.find(b"\xff\xd9streamdata", 2)
-    if primary_eoi < 0:
+    # 以主图真实结束位置定位 trailer；实测同机型允许一字节 NUL 对齐填充。
+    primary_eoi = scan_jpeg(data)[-1].offset
+    data_marker = primary_eoi + 2
+    if data[data_marker : data_marker + 1] == b"\x00":
+        data_marker += 1
+    if not data.startswith(_DATA, data_marker):
         return None
     info_offset = data.rfind(_INFO)
     if info_offset < 0 or info_offset + 38 > len(data):
         raise InvalidJpegError("vivo streamdata 缺少完整的尾部 streaminfo")
-    auxiliary_offset = primary_eoi + 2 + len(_DATA)
+    auxiliary_offset = data_marker + len(_DATA)
     if data[auxiliary_offset : auxiliary_offset + 2] != b"\xff\xd8":
         raise InvalidJpegError("vivo streamdata 载荷不是 JPEG")
     auxiliary_segments = scan_jpeg(data[auxiliary_offset:info_offset])

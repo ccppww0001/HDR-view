@@ -57,7 +57,8 @@ def test_build_script_requires_an_explicit_tool_directory():
     env = dict(os.environ)
     env.pop("HDRVIEW_TOOL_DIR", None)
 
-    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-Test"], capture_output=True, text=True, env=env)
+    # PowerShell 重定向采用 UTF-8，显式解码以适配中文 Windows 系统区域设置。
+    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-Test"], capture_output=True, text=True, encoding="utf-8", env=env)
 
     assert result.returncode != 0
     assert "HDRVIEW_TOOL_DIR" in result.stdout + result.stderr

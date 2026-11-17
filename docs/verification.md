@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-11-17：默认 1000 尼特与导出结构整理
+
+用户对比 `IMG_20261116_204341.jpg` 的两档结果后选择 1000 尼特。`convert-vivo`、`convert-nvidia`、`enhance-nvidia` 及底层 Ultra HDR 编码统一默认 1000 尼特；400 尼特通过 `--target-nits 400` 选择，双档通过 `--target-nits 400 1000` 选择。
+
+共享导出迁至 `src/hdrview/output/export.py`，命令入口共用导出和重建参数定义。结构说明见 [项目结构](structure.md)。新增照片的单个零字节填充现由正式容器解析器识别，所有偏移仍指向原始字节，五张本地照片的辅助图解析与原文件不变检查通过。
+
+本轮以 Python 3.12 的 `.venv-nvidia` 环境执行完整测试，设置 `PYTHONPATH=src`、`PYTHONUTF8=1`，命令为 `python -B -m pytest -q -p no:cacheprovider --basetemp=output/.structure-check-tests`。结果为 **123 项通过、1 项跳过**；跳过项为当前受限 Windows 环境未授予创建目录联接权限的测试。默认仅输出 1000 尼特、显式双档输出、共享编码和参考解码均已覆盖。测试临时目录在结束后清理。
+
 ## 2026-11-17：标准 Ultra HDR 垂直切片
 
 已在本机使用官方 `libultrahdr v2.0.2`（提交 `e5f5a022…`）与固定 `libjpeg-turbo 3.2.0` 构建 Windows x64 桥接。64×64 合成图的 SDR 基础为 64/255 灰阶，中央 16×16 区域的线性 HDR 为 SDR 的 4 倍。

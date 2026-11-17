@@ -36,13 +36,16 @@ def test_nvidia_intermediate_exports_standard_ultrahdr(tmp_path: Path):
 
     assert main(["convert-nvidia", str(source), "--intermediate", str(intermediate.stem), "--output", str(tmp_path / "out")]) == 0
 
-    result = inspect_ultrahdr(tmp_path / "out" / "run-001" / f"{source.stem}-UltraHDR-400nit.jpg")
+    run_dir = tmp_path / "out" / "run-001"
+    result = inspect_ultrahdr(run_dir / f"{source.stem}-UltraHDR-1000nit.jpg")
     assert result.is_ultrahdr
     assert result.width == 4096
     assert result.gainmap_width > 0
-    assert (tmp_path / "out" / "run-001" / f"{source.stem}-HDR-400nit.jxr").is_file()
+    assert result.hdr_capacity_max == pytest.approx(1000 / 203, rel=0.001)
+    assert not list(run_dir.glob("*400nit*"))
     report = json.loads((tmp_path / "out" / "run-001" / "report.json").read_text(encoding="utf-8"))
-    assert [item["display_mapping"] for item in report["outputs"]] == ["hdr400-highlight-compression", "none"]
+    assert [item["target_nits"] for item in report["outputs"]] == [1000]
+    assert [item["display_mapping"] for item in report["outputs"]] == ["none"]
     assert report["gpu_executed"] is False
     assert "intermediate" not in report
 
@@ -99,7 +102,7 @@ def test_enhance_nvidia_persists_intermediate_and_reports_actual_provenance(tmp_
     )
 
     monkeypatch.setattr("hdrview.cli.run_truehdr", lambda sdr, params, source_sha256: hdr)
-    monkeypatch.setattr("hdrview.cli._export_hdr", lambda hdr, sdr, run_dir, stem, target_nits: {"target_nits": target_nits})
+    monkeypatch.setattr("hdrview.cli.export_hdr", lambda hdr, sdr, run_dir, stem, target_nits: {"target_nits": target_nits})
 
     assert main(["enhance-nvidia", str(source), "--output", str(tmp_path / "out")]) == 0
 
@@ -117,6 +120,7 @@ def test_enhance_nvidia_persists_intermediate_and_reports_actual_provenance(tmp_
     assert report["content_hdr_capacity_max"] == 2.75
     assert report["truehdr_params"] == vars(TrueHdrParams())
     assert report["gpu_executed"] is True
+    assert report["outputs"] == [{"target_nits": 1000}]
 
 
 @pytest.mark.skipif(not SAMPLES.is_dir(), reason="私人原始样本不在工作区")

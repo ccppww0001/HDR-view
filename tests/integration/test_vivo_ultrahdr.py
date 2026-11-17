@@ -20,7 +20,7 @@ def test_vivo_candidate_exports_real_ultrahdr_and_preserves_sdr_base(tmp_path: P
     source = SAMPLES / "IMG_20261116_212648.jpg"
     before = source.read_bytes()
 
-    assert main(["convert-vivo", str(source), "--output", str(tmp_path)]) == 0
+    assert main(["convert-vivo", str(source), "--target-nits", "400", "1000", "--output", str(tmp_path)]) == 0
 
     output_dir = tmp_path / "run-001"
     output = output_dir / "IMG_20261116_212648-UltraHDR-400nit.jpg"
@@ -86,3 +86,6 @@ def test_vivo_path_does_not_contain_nvidia_provenance(tmp_path: Path):
 
     assert report[0]["pipeline"] == "vivo-private-highlight-candidate"
     assert "nvidia" not in json.dumps(report).lower()
+    assert [item["target_nits"] for item in report[0]["outputs"]] == [1000]
+    assert report[0]["outputs"][0]["display_mapping"] == "none"
+    assert not list((tmp_path / "run-001").glob("*400nit*"))

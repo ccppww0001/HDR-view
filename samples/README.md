@@ -2,16 +2,17 @@
 
 ## 当前验证样本
 
-`D:\MyProject\HDR-view\images\fromthephone` 中四张 USB 原始 JPEG。此目录被 Git 忽略，图片不会复制进测试 fixtures 或提交历史。
+`D:\MyProject\HDR-view\images\fromthephone` 中五张原始 JPEG。此目录被 Git 忽略，图片不会复制进测试 fixtures 或提交历史。
 
 | 文件 | SHA-256 | 私有辅助图大小 | maxGain |
 |---|---|---:|---:|
 | IMG_20261111_175548.jpg | 9AD48715BCCFA47AFE3DE889CEFD53B36BDF3EA3CC316441DA66670A81CABCD9 | 840856 B | 4.5 |
 | IMG_20261111_175601.jpg | C85016EEE3B5785269919BA100BA6B994C2F2BB5EDA3FBE34CB60F99B0755734 | 870151 B | 4.5 |
+| IMG_20261116_204341.jpg | 3D516CBE4EBDC4B1D6EDA7D4C6669275A86B9B2FA3F4D951B59B76571996AC89 | 771834 B | 4.466034 |
 | IMG_20261116_212648.jpg | 2124089E036E82BE33924A0724EC0E3901069EA558E4080949975919C54C41FC | 708062 B | 1.3358011 |
 | IMG_20261116_212653.jpg | B4EAB775629925A5E2D1F6AE579932A7F302E7A7D15E646AF4EC282B6F6FD846 | 708958 B | 1.5154562 |
 
-四张均含 vivo 私有 `streamdata/streaminfo`，并非标准 Ultra HDR。用户报告其中一张在手机相册无 HDR 表现；文件是否含辅助图与相册是否启用显示效果必须分别判断。
+五张均含 vivo 私有 `streamdata/streaminfo`，并非标准 Ultra HDR。`IMG_20261116_204341.jpg` 在主 JPEG 结束位置后有一个零字节填充，解析时保留原始偏移并验证完整辅助 JPEG。用户报告其中一张在手机相册无 HDR 表现；文件是否含辅助图与相册是否启用显示效果必须分别判断。
 
 ## 隐私与处理约束
 
