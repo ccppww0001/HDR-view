@@ -1,0 +1,81 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "widgets_values": {
+        "image": "input.png",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 2,
+      "type": "HdrViewPrepareTrueHDR",
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1
+        }
+      ],
+      "widgets_values": {}
+    },
+    {
+      "id": 3,
+      "type": "RTXTrueHDR",
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "widgets_values": {
+        "contrast": 100,
+        "saturation": 100,
+        "middle_gray": 50,
+        "luminance": 400,
+        "debanding": true,
+        "output_colorspace": "HDR PQ"
+      }
+    },
+    {
+      "id": 4,
+      "type": "HdrViewSaveLinear",
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3
+        }
+      ],
+      "widgets_values": {}
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "IMAGE"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "IMAGE"
+    ]
+  ]
+}

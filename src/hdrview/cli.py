@@ -10,6 +10,7 @@ from hdrview.color.icc import decode_with_icc
 from hdrview.io.intermediate import write_intermediate
 from hdrview.io.output import create_output_dir
 from hdrview.io.source import assert_original_unchanged, read_source
+from hdrview.nvidia.postprocess import read_truehdr_output
 from hdrview.output.ultrahdr import encode_ultrahdr
 from hdrview.vivo.container import inspect_jpeg
 from hdrview.vivo.diagnostics import analyze_file
@@ -66,7 +67,24 @@ def main(argv: list[str] | None = None) -> int:
     convert.add_argument("--scale", type=float, default=4.0)
     convert.add_argument("--max-gain-cap", type=float, default=4.5)
     convert.add_argument("--highlight-threshold", type=float, default=0.02)
+    nvidia = subparsers.add_parser("convert-nvidia", help="ComfyUI TrueHDR 中间结果到标准 Ultra HDR")
+    nvidia.add_argument("input", type=Path)
+    nvidia.add_argument("--intermediate", type=Path, required=True)
+    nvidia.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
+
+    if args.command == "convert-nvidia":
+        source = read_source(args.input)
+        hdr = read_truehdr_output(args.intermediate, expected_source_sha256=source.sha256)
+        sdr = decode_with_icc(source.data)
+        if hdr.rgba.shape != sdr.rgba.shape:
+            raise ValueError("NVIDIA 中间结果与原图尺寸不匹配")
+        run_dir = create_output_dir(args.output, sources=[args.input])
+        output = run_dir / f"{args.input.stem}-UltraHDR.jpg"
+        report = encode_ultrahdr(hdr, sdr, output)
+        assert_original_unchanged(source)
+        _write_report(run_dir / "report.json", {"source": str(args.input), "pipeline": "nvidia-truehdr", "output": str(output), "is_ultrahdr": report.is_ultrahdr})
+        return 0
 
     if args.command == "inspect":
         paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
