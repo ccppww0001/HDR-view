@@ -9,9 +9,11 @@ from pathlib import Path
 
 from hdrview.color.icc import decode_with_icc
 from hdrview.io.intermediate import write_intermediate
+from hdrview.io.inputs import jpeg_inputs
 from hdrview.io.output import create_output_dir
 from hdrview.io.source import assert_original_unchanged, read_source
 from hdrview.nvidia.postprocess import read_truehdr_output
+from hdrview.nvidia.provenance import intermediate_input_report, reused_vsr_report
 from hdrview.nvidia.runtime import TrueHdrParams, run_truehdr
 from hdrview.nvidia.vsr import VsrParams, run_vsr
 from hdrview.output.export import DEFAULT_TARGET_NITS, SUPPORTED_TARGET_NITS, export_hdr
@@ -121,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("input", type=Path)
     verify.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
+    if hasattr(args, "target_nits"):
+        # 保留用户顺序并去重，避免第二次写同名文件时失败。
+        args.target_nits = list(dict.fromkeys(args.target_nits))
     if args.command == "enhance-nvidia" and not args.vsr and any(
         getattr(args, name) is not None for name in ("vsr_mode", "vsr_scale", "vsr_quality", "vsr_strength")
     ):
@@ -146,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         from hdrview.verify.roundtrip import decode_reference
 
         # 派生基础图属于标准动态范围，目录验证只排除这一明确命名的辅助文件。
-        paths = [path for path in sorted(args.input.glob("*.jpg")) if not path.name.endswith("-VSR-base.jpg")] if args.input.is_dir() else [args.input]
+        paths = [path for path in jpeg_inputs(args.input) if not path.stem.lower().endswith("-vsr-base")] if args.input.is_dir() else [args.input]
         if not paths:
             raise FileNotFoundError("没有可验证的 Ultra HDR 图片")
         reports = []
@@ -181,6 +186,10 @@ def main(argv: list[str] | None = None) -> int:
                     vsr_quality=vsr_report["quality"], vsr_strength=vsr_report["strength"],
                     sdr_base_sha256=hashlib.sha256(sdr.compressed_jpeg).hexdigest(),
                 )
+                # 补充可恢复的模型和传递函数来源，兼容旧报告缺少这些字段。
+                for key in ("quality_level", "output_transfer"):
+                    if key in vsr_report:
+                        hdr.provenance["vsr_" + key] = vsr_report[key]
             gpu_executed = True
             truehdr_params = vars(params)
         else:
@@ -195,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
                 if base.sha256 != base_hash:
                     raise ValueError("派生基础图 SHA-256 与中间结果不匹配")
                 sdr = decode_with_icc(base.data)
-                vsr_report = {"executed": False, "intermediate_vsr_applied": True}
+                vsr_report = reused_vsr_report(hdr)
             elif args.sdr_base is not None:
                 raise ValueError("当前中间结果未绑定派生基础图，请省略 --sdr-base")
             gpu_executed = False
@@ -214,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
             "gpu_executed": gpu_executed,
             "vsr": vsr_report,
         }
+        if args.command == "convert-nvidia":
+            report["intermediate_input"] = intermediate_input_report(args.intermediate)
+            if "nvidia-vfx" in hdr.provenance:
+                report["nvidia_vfx"] = hdr.provenance["nvidia-vfx"]
+            report["content_hdr_capacity_max"] = hdr.hdr_capacity_max
         if hdr.provenance.get("sdr_base_sha256"):
             base_path = run_dir / f"{args.input.stem}-VSR-base.jpg"
             base_path.write_bytes(sdr.compressed_jpeg)
@@ -236,14 +250,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "inspect":
-        paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
+        paths = jpeg_inputs(args.input)
         _write_report(args.output, [_inspect(path) for path in paths])
         return 0
     if args.command == "analyze-vivo":
         _write_report(args.output, analyze_file(args.input))
         return 0
 
-    paths = sorted(args.input.glob("*.jpg")) if args.input.is_dir() else [args.input]
+    paths = jpeg_inputs(args.input)
     if not paths:
         raise FileNotFoundError("没有可处理的 JPEG 输入")
     documents = [inspect_jpeg(path) for path in paths]

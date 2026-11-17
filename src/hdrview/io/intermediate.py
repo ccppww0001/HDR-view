@@ -19,8 +19,16 @@ class IntermediatePaths:
     metadata: Path
 
 
-def _paths(stem: Path) -> IntermediatePaths:
-    return IntermediatePaths(stem=stem, pixel=stem.with_suffix(".f16rgba"), metadata=stem.with_suffix(".json"))
+def intermediate_paths(stem: Path) -> IntermediatePaths:
+    """只去掉明确的中间文件扩展名，保留照片名中的其他点号。"""
+
+    stem = Path(stem)
+    if stem.suffix.lower() in {".f16rgba", ".json"}:
+        stem = stem.with_suffix("")
+    return IntermediatePaths(
+        stem=stem, pixel=stem.with_name(stem.name + ".f16rgba"),
+        metadata=stem.with_name(stem.name + ".json"),
+    )
 
 
 def _validate(image: HdrImage) -> tuple[int, int, np.ndarray]:
@@ -48,7 +56,7 @@ def write_intermediate(image: HdrImage, stem: Path) -> IntermediatePaths:
     """先完整校验，再写新像素与 JSON；不自动覆盖已有中间文件。"""
 
     height, width, rgba = _validate(image)
-    paths = _paths(stem)
+    paths = intermediate_paths(stem)
     if paths.pixel.exists() or paths.metadata.exists():
         raise InvalidIntermediateError("中间输出已存在，拒绝覆盖")
     paths.stem.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +81,7 @@ def write_intermediate(image: HdrImage, stem: Path) -> IntermediatePaths:
 def read_intermediate(stem: Path) -> HdrImage:
     """sidecar 是像素解释的必要条件，不根据扩展名推断 HDR。"""
 
-    paths = _paths(stem)
+    paths = intermediate_paths(stem)
     try:
         payload = json.loads(paths.metadata.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:

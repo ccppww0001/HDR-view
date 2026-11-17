@@ -144,6 +144,7 @@ def test_convert_vsr_intermediate_checks_derived_base(tmp_path, monkeypatch, cas
     wrong = jpeg(tmp_path / "wrong.jpg", (16, 12), (200, 40, 10))
     image = hdr_for(decode_with_icc(base.read_bytes()), digest(source))
     image.provenance["vsr_applied"] = True
+    image.provenance.update(vsr_mode="upscale", vsr_scale=2, vsr_quality="high", vsr_strength=0.5)
     if case != "missing_hash":
         image.provenance["sdr_base_sha256"] = digest(base)
     intermediate = write_intermediate(image, tmp_path / "intermediate")
@@ -166,8 +167,16 @@ def test_convert_vsr_intermediate_checks_derived_base(tmp_path, monkeypatch, cas
     assert main(args) == 0
     report = json.loads((tmp_path / "out/run-001/report.json").read_text(encoding="utf-8"))
     assert report["gpu_executed"] is False
-    assert report["vsr"] == {"executed": False, "intermediate_vsr_applied": True}
+    assert report["vsr"] == {
+        "executed": False, "intermediate_vsr_applied": True,
+        "mode": "upscale", "scale": 2, "quality": "high", "strength": 0.5,
+        "source_sha256": digest(source), "sdr_base_sha256": digest(base),
+    }
     assert report["sdr_base"]["sha256"] == digest(base)
+    assert report["intermediate_input"] == {
+        "pixel": str(intermediate.pixel.resolve()), "pixel_sha256": digest(intermediate.pixel),
+        "metadata": str(intermediate.metadata.resolve()), "metadata_sha256": digest(intermediate.metadata),
+    }
     assert "intermediate" not in report
 
 
@@ -203,3 +212,18 @@ def test_verify_directory_rejects_only_vsr_base(tmp_path, monkeypatch):
     monkeypatch.setattr("hdrview.verify.roundtrip.decode_reference", lambda *args: pytest.fail("unexpected decode"))
     with pytest.raises(FileNotFoundError, match="没有可验证"):
         main(["verify", str(tmp_path)])
+
+
+def test_duplicate_targets_export_once_before_output_conflict(tmp_path, monkeypatch):
+    source = jpeg(tmp_path / "source.jpg")
+    calls = []
+    monkeypatch.setattr("hdrview.cli.run_truehdr", lambda sdr, params, source_hash: hdr_for(sdr, source_hash))
+    def export(hdr, sdr, run_dir, stem, nits):
+        calls.append(nits)
+        # 真正独占创建一次目标文件，重复调用会失败。
+        with (run_dir / f"result-{nits}.jpg").open("xb") as stream:
+            stream.write(b"synthetic")
+        return {"target_nits": nits}
+    monkeypatch.setattr("hdrview.cli.export_hdr", export)
+    assert main(["enhance-nvidia", str(source), "--target-nits", "1000", "400", "1000", "400", "--output", str(tmp_path / "out")]) == 0
+    assert calls == [1000, 400]

@@ -31,6 +31,12 @@ $env:PYTHONPATH = 'src'
 
 对于经过增强的 TrueHDR 中间结果，`convert-nvidia` 必须指定 `--sdr-base <本次增强派生 JPEG>`，并校验派生基础图哈希。
 
+```powershell
+.venv-nvidia\Scripts\python.exe -m hdrview convert-nvidia <原始 JPEG> --intermediate <结果目录/原图名-truehdr> --sdr-base <结果目录/原图名-VSR-base.jpg>
+```
+
+`--intermediate` 可使用完整 stem，或对应 `.json` / `.f16rgba` 路径。名称中的其他点号完整保留。重编码报告的 `intermediate_input` 记录输入像素文件与元数据文件的绝对路径、各自 SHA-256，`vsr` 保留原增强模式、倍数、质量和强度，并标明本轮没有重新执行模型。缺少这些可选参数的旧中间文件仍可读取，报告只保留已知字段。
+
 ## 已有中间结果
 
 `convert-nvidia` 保留中间结果转换入口：
@@ -41,6 +47,8 @@ python -m hdrview.cli convert-nvidia <原始 JPEG> --intermediate <中间结果 
 ```
 
 它校验原图 SHA-256、尺寸和 `pipeline=nvidia-truehdr`，`gpu_executed=false` 表示本次只转换，不否定中间结果曾经来自真实模型，也不制造 GPU 证据。
+
+源文件、模型和参数检查失败时结果目录尚未创建；最终编码阶段发生在新运行目录创建之后。如果编码失败，可保留该次中间文件供排查，并在重新运行时分配新的运行目录。成功标志以命令退出状态与完整 `report.json` 为准。
 
 ## 共享输出
 

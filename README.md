@@ -6,6 +6,27 @@ vivo 输出始终是**合理 HDR 重建，手机 XDR 观感未验证**。NVIDIA 
 
 ## 构建与命令
 
+在项目根目录设置源码搜索路径，使用现有 NVIDIA 独立环境：
+
+```powershell
+$env:PYTHONPATH = (Join-Path (Get-Location) 'src')
+$env:PYTHONUTF8 = '1'
+$pythonPath = '.venv-nvidia\Scripts\python.exe'
+& $pythonPath -m hdrview --help
+```
+
+| 目的 | 调用方式（接在上述环境准备之后） |
+|---|---|
+| NVIDIA 高动态范围增强，默认 1000 尼特 | `& $pythonPath -m hdrview enhance-nvidia <原图>` |
+| 先放大 2 倍再增强高动态范围 | `& $pythonPath -m hdrview enhance-nvidia <原图> --vsr --vsr-scale 2` |
+| 同尺寸去噪后增强高动态范围 | `& $pythonPath -m hdrview enhance-nvidia <原图> --vsr --vsr-mode denoise --vsr-strength 0.5` |
+| 独立放大，输出普通 JPEG | `& $pythonPath -m hdrview enhance-vsr <原图> --vsr-scale 2` |
+| 独立去模糊 | `& $pythonPath -m hdrview enhance-vsr <原图> --vsr-mode deblur` |
+| vivo 辅助高光候选重建 | `& $pythonPath -m hdrview convert-vivo <原图>` |
+| 检查输出文件的结构与参考解码 | `& $pythonPath -m hdrview verify <输出文件或运行目录>` |
+
+路径有空格时使用引号。`python -m hdrview.cli` 与新入口兼容；目录检查和 vivo 批处理同时识别 `.jpg`、`.jpeg` 及大小写扩展名。重复的 `--target-nits` 数值会按输入顺序去重。
+
 构建入口统一位于 `src/hdrview/native/Build-Native.ps1`：
 
 ```powershell
@@ -38,6 +59,8 @@ $env:PYTHONPATH = 'src'
 `--vsr-mode` 支持 `upscale`、`denoise` 和 `deblur`，默认 `upscale`；`--vsr-scale` 默认 2，放大支持整数 2、3、4 倍，去噪和去模糊保持原尺寸。`--vsr-quality` 支持 `low`、`medium`、`high`、`ultra`，默认 `high`，对应官方质量等级；`--vsr-strength` 范围为 0 到 1，默认 1。输出最长边不超过 16384 像素，总像素不超过 128 Mi。图库照片效果需要逐图对比。
 
 增强输出经伽马 2.2 转回 sRGB，保存为派生基础 JPEG，原图保留。报告记录原图哈希和尺寸、实际增强参数及派生基础图哈希。转换经过增强的 TrueHDR 中间文件时，`convert-nvidia` 需要通过 `--sdr-base <本次增强派生 JPEG>` 提供基础图并校验哈希。详细说明见 [NVIDIA 工作流](docs/workflows/nvidia-truehdr.md)。
+
+复用结果时，新报告保留原增强参数，并在 `intermediate_input` 记录输入像素和元数据路径、各自哈希。本轮是否执行模型与历史增强来源分别记录。视频超分辨率调用官方 NVIDIA 包；位解包参考 Comfy-Org 官方扩展，来源见 [上游审计](docs/research/source-audit.md)。
 
 ## 输出与 HDR400 映射
 

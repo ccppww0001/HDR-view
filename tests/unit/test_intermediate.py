@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from hdrview.errors import InvalidIntermediateError
-from hdrview.io.intermediate import read_intermediate, write_intermediate
+from hdrview.io.intermediate import intermediate_paths, read_intermediate, write_intermediate
 from hdrview.model import ColorState, HdrImage
 
 
@@ -76,3 +76,14 @@ def test_read_rejects_wrong_pixel_byte_length(tmp_path: Path):
 
     with pytest.raises(InvalidIntermediateError):
         read_intermediate(paths.stem)
+
+
+def test_dotted_photo_names_remain_distinct_and_explicit_paths_are_readable(tmp_path: Path):
+    first = write_intermediate(hdr_image(), tmp_path / "photo.one-truehdr")
+    second = write_intermediate(hdr_image(), tmp_path / "photo.two-truehdr")
+    assert first.pixel.name == "photo.one-truehdr.f16rgba"
+    assert second.pixel.name == "photo.two-truehdr.f16rgba"
+    assert first.pixel != second.pixel
+    for path in (first.stem, first.pixel, first.metadata):
+        assert intermediate_paths(path) == first
+        np.testing.assert_array_equal(read_intermediate(path).rgba, hdr_image().rgba)
