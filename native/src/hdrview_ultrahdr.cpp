@@ -5,13 +5,18 @@
 
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <vector>
+#include <windows.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
 
 namespace fs = std::filesystem;
 using Decoder = std::unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
@@ -45,6 +50,24 @@ void check(uhdr_error_info_t result) {
     if (result.error_code != UHDR_CODEC_OK) {
         throw std::runtime_error(result.has_detail ? result.detail : "libultrahdr codec error");
     }
+}
+
+std::string sha256(const std::vector<uint8_t>& bytes) {
+    // 使用 Windows 原生密码学接口，避免十六进制字节误当 SHA-256。
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    require(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) >= 0, "SHA-256 provider unavailable");
+    require(BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0, "SHA-256 hash unavailable");
+    std::vector<uint8_t> digest(32);
+    const auto status = BCryptHashData(hash, const_cast<PUCHAR>(bytes.data()), static_cast<ULONG>(bytes.size()), 0);
+    if (status >= 0) require(BCryptFinishHash(hash, digest.data(), digest.size(), 0) >= 0, "SHA-256 finish failed");
+    BCryptDestroyHash(hash);
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    require(status >= 0, "SHA-256 data failed");
+    std::ostringstream output;
+    output << std::hex << std::setfill('0');
+    for (const auto byte : digest) output << std::setw(2) << static_cast<unsigned>(byte);
+    return output.str();
 }
 
 int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& sdr_path, const fs::path& output) {
@@ -90,6 +113,7 @@ int encode(const fs::path& hdr_path, const fs::path& meta_path, const fs::path& 
     require(encoded && encoded->data && encoded->data_sz > 0, "encoder returned no JPEG");
 
     const auto temporary = output.wstring() + L".tmp";
+
     require(!fs::exists(temporary), "temporary output already exists");
     try {
         std::ofstream stream(temporary, std::ios::binary);
@@ -118,6 +142,9 @@ int inspect(const fs::path& input, const fs::path& report) {
     check(uhdr_dec_set_image(decoder.get(), &image));
     check(uhdr_dec_probe(decoder.get()));
     const auto* metadata = uhdr_dec_get_gainmap_metadata(decoder.get());
+    auto* base = uhdr_dec_get_base_image(decoder.get());
+    auto* gain = uhdr_dec_get_gainmap_image(decoder.get());
+    require(base && gain && metadata, "Ultra HDR probe lacks base/gain/metadata");
     std::ofstream json(report);
     require(json.good(), "cannot open inspect report");
     json << "{\n"
@@ -128,6 +155,41 @@ int inspect(const fs::path& input, const fs::path& report) {
          << "  \"gainmap_height\": " << uhdr_dec_get_gainmap_height(decoder.get()) << ",\n"
          << "  \"hdr_capacity_min\": " << (metadata ? metadata->hdr_capacity_min : 0) << ",\n"
          << "  \"hdr_capacity_max\": " << (metadata ? metadata->hdr_capacity_max : 0) << "\n}\n";
+    const fs::path base_path = report.wstring() + L".base.jpg";
+    const fs::path gain_path = report.wstring() + L".gain.jpg";
+    std::ofstream(base_path, std::ios::binary).write(static_cast<const char*>(base->data), base->data_sz);
+    std::ofstream(gain_path, std::ios::binary).write(static_cast<const char*>(gain->data), gain->data_sz);
+    return 0;
+}
+
+int decode(const fs::path& input, const fs::path& raw, const fs::path& metadata, float display_boost) {
+    require(display_boost >= 1.0f, "display boost must be >= 1");
+    const auto bytes = read_file(input);
+    Decoder decoder(uhdr_create_decoder(), &uhdr_release_decoder);
+    require(decoder != nullptr, "cannot allocate decoder");
+    uhdr_compressed_image_t image{};
+    image.data = const_cast<uint8_t*>(bytes.data());
+    image.data_sz = image.capacity = bytes.size();
+    image.cg = UHDR_CG_UNSPECIFIED;
+    image.ct = UHDR_CT_UNSPECIFIED;
+    image.range = UHDR_CR_UNSPECIFIED;
+    check(uhdr_dec_set_image(decoder.get(), &image));
+    check(uhdr_dec_set_out_img_format(decoder.get(), UHDR_IMG_FMT_64bppRGBAHalfFloat));
+    check(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));
+    check(uhdr_dec_set_out_max_display_boost(decoder.get(), display_boost));
+    check(uhdr_dec_probe(decoder.get()));
+    check(uhdr_decode(decoder.get()));
+    auto* decoded = uhdr_get_decoded_image(decoder.get());
+    require(decoded && decoded->planes[0], "decode returned no pixels");
+    const size_t length = uint64_t(decoded->w) * decoded->h * 8;
+    std::ofstream(raw, std::ios::binary).write(static_cast<const char*>(decoded->planes[0]), length);
+    std::ofstream json(metadata);
+    json << "{\"schema\":1,\"width\":" << decoded->w << ",\"height\":" << decoded->h
+         << ",\"channels\":4,\"pixel_format\":\"rgba-float16\",\"byte_stride\":" << decoded->w * 8
+         << ",\"primaries\":\"bt2020\",\"transfer\":\"linear\",\"sdr_white_nits\":203.0,"
+         << "\"hdr_capacity_max\":" << display_boost
+         << ",\"provenance\":{\"source_sha256\":\"" << sha256(bytes)
+         << "\",\"pipeline\":\"libultrahdr-reference-decode\"}}\n";
     return 0;
 }
 
@@ -137,12 +199,16 @@ int main(int argc, char** argv) {
             std::cout << "hdrview-ultrahdr bridge; libultrahdr " << UHDR_LIB_VERSION << '\n';
             return 0;
         }
-        if (argc == 11 && std::strcmp(argv[1], "encode") == 0 && std::strcmp(argv[2], "--hdr") == 0 &&
+        if (argc == 10 && std::strcmp(argv[1], "encode") == 0 && std::strcmp(argv[2], "--hdr") == 0 &&
             std::strcmp(argv[4], "--meta") == 0 && std::strcmp(argv[6], "--sdr") == 0 && std::strcmp(argv[8], "--output") == 0) {
             return encode(argv[3], argv[5], argv[7], argv[9]);
         }
-        if (argc == 7 && std::strcmp(argv[1], "inspect") == 0 && std::strcmp(argv[2], "--input") == 0 && std::strcmp(argv[4], "--json") == 0) {
+        if (argc == 6 && std::strcmp(argv[1], "inspect") == 0 && std::strcmp(argv[2], "--input") == 0 && std::strcmp(argv[4], "--json") == 0) {
             return inspect(argv[3], argv[5]);
+        }
+        if (argc == 10 && std::strcmp(argv[1], "decode") == 0 && std::strcmp(argv[2], "--input") == 0 &&
+            std::strcmp(argv[4], "--raw") == 0 && std::strcmp(argv[6], "--meta") == 0 && std::strcmp(argv[8], "--boost") == 0) {
+            return decode(argv[3], argv[5], argv[7], std::stof(argv[9]));
         }
         std::cerr << "usage: encode --hdr raw --meta json --sdr original.jpg --output new.jpg; inspect --input file --json report";
         return 2;
