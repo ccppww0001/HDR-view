@@ -1,5 +1,11 @@
 # 验证记录
 
+## 2026-11-18 Windows 单文件发行版
+
+将 `HDR-view.exe` 单独复制到临时目录，并从搜索路径中移除 Python。两张 iQOO Neo9 Pro 样张在含中文和空格的路径下批量导出了 400 尼特与 1000 尼特 Ultra HDR JPEG、浮点 JPEG XR 及逐图报告。四张 Ultra HDR JPEG 均通过参考解码，原图哈希保持一致。
+
+同一个可执行文件使用外部 NVIDIA 环境实际运行去噪与 TrueHDR，并在取消 NVIDIA 环境配置后读取已有中间结果进行重编码。已验证 `--licenses` 可读取随单文件打包的许可文本。见 [Windows 发行版](windows-release.md)。
+
 ## 2026-11-18 批量输出与 iQOO Neo9 Pro 样本复核
 
 用当天拍摄的 22 张原图实测批量转换。17 张带辅助图的照片在 `output/vivo` 平铺生成 Ultra HDR JPEG 和逐图报告，5 张只有相机元数据的照片被列出并跳过。此前被拒的 `maxGain=0.6358773` 样本已完成编码和参考解码。22 张原图的哈希保持一致。色彩分析见[私有格式研究](research/vivo-xdr-format.md#2026-11-18-照片复核)。

@@ -1,8 +1,19 @@
 # HDR-view
 
-HDR-view 是一个面向 Windows 的照片处理工具。它可以利用 iQOO Neo9 Pro 原图中的 vivo 私有辅助图重建高光，也可以用 NVIDIA TrueHDR 增强普通照片。两条路线都支持批量生成 Ultra HDR JPEG。
+HDR-view 是一个面向 Windows 的照片处理工具，支持 vivo 私有辅助图识别与高光重建，以及 NVIDIA TrueHDR 照片增强。两条路线都支持批量生成 Ultra HDR JPEG。
 
-## 快速开始
+## Windows 单文件版
+
+在 `HDR-view.exe` 所在目录打开 PowerShell。单文件版可以直接转换、检查和验证图片，内含 Python 与原生编码组件。
+
+```powershell
+.\HDR-view.exe --help
+.\HDR-view.exe convert-vivo "D:\照片" -o ".\output\vivo"
+```
+
+调用 NVIDIA 模型时需指定已安装模型依赖的 Python 环境。安装方法和单文件版构建步骤见 [Windows 发行版](docs/windows-release.md)。
+
+## 从源码运行
 
 在仓库根目录打开 PowerShell 7。准备 64 位 Windows、Python 3.12 和 Visual Studio 的「使用 C++ 的桌面开发」工作负载（含 CMake）。
 
@@ -28,19 +39,17 @@ hdrview enhance-vsr ".\images\a.jpg" ".\images\b.jpeg" --vsr-mode denoise
 
 | 功能 | 命令 | 省略输出参数时的目录 |
 | --- | --- | --- |
-| vivo 高光重建并导出 | `convert-vivo` | `output/vivo` |
+| vivo 高光重建并导出[^vivo-reference] | `convert-vivo` | `output/vivo` |
 | vivo 重建中间结果 | `reconstruct-vivo` | `output/vivo` |
 | NVIDIA TrueHDR 增强并导出 | `enhance-nvidia` | `output/nvidia` |
 | 复用 NVIDIA 中间结果导出 | `convert-nvidia` | `output/nvidia` |
 | NVIDIA 照片放大、去噪或去模糊 | `enhance-vsr` | `output/nvidia` |
 
-`vivo` 是私有辅助图的格式标识。当前验证设备为 [iQOO Neo9 Pro](https://www.vivo.com.cn/vivo/param/iqooneo9pro)。
-
 默认目录相对于运行命令的位置。`-o`、`--output-dir` 或 `--output` 都可指定实际输出目录，例如 `-o ".\results"`。图片、相关中间文件和每张图的 `原图名-命令名-report.json` 直接保存在同一目录。
 
 同一批次的原图需要使用不同的文件主名，例如 `a.jpg` 与 `a.jpeg` 会冲突。已有同名产物时，命令退出并报告冲突。重新处理同一张图时，可以通过 `-o` 选用另一目录。整批编码完成后才写入目标目录，原图保持只读。
 
-批量处理 iQOO Neo9 Pro 照片时，程序会列出并跳过没有私有辅助图的文件。存在损坏或暂未支持的辅助图结构时，批次会停止并报告对应文件。
+批量执行 vivo 转换时，程序会列出并跳过没有私有辅助图的文件。存在损坏或暂未支持的辅助图结构时，批次会停止并报告对应文件。
 
 常用转换默认生成 1000 尼特 Ultra HDR JPEG。指定 `--target-nits 400` 后导出 400 尼特 Ultra HDR JPEG 和浮点 JPEG XR，指定 `--target-nits 400 1000` 同时导出两档。独立的 `enhance-vsr` 输出标准动态范围 JPEG。
 
@@ -66,3 +75,5 @@ python -m pytest
 ## 许可证
 
 本项目原创代码和文档采用[零条款 BSD 许可证](LICENSE)（`0BSD`）。第三方依赖、原生库与模型适用各自的许可证。详见[上游来源](docs/research/source-audit.md)。
+
+[^vivo-reference]: vivo 私有辅助图的识别规则以 iQOO Neo9 Pro 样张为参考。
