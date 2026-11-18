@@ -1,38 +1,40 @@
 # 项目结构与调用链
 
-`src/hdrview/__main__.py` 提供 `python -m hdrview` 入口，`cli.py` 负责命令参数解析与流程编排。安装 Python 包后也可使用 `hdrview` 命令，原有 `python -m hdrview.cli` 继续可用。三种调用方式使用同一解析入口。vivo 路线由 `vivo/` 解析和重建辅助图，NVIDIA 路线由 `nvidia/` 执行模型及前后处理；两条路线分别生成共享的线性 BT.2020、203 尼特参考白中间表示。
+安装 Python 包后可通过 `hdrview`、`python -m hdrview` 或 `python -m hdrview.cli` 调用同一套命令。Windows 单文件版由 `release.py` 启动，可通过指定解释器调用独立的 NVIDIA 环境。
 
-`nvidia/vsr.py` 封装官方视频超分辨率增强：`enhance-vsr` 单独生成标准 sRGB JPEG 与报告，`enhance-nvidia --vsr` 先增强再执行 TrueHDR。增强产生的派生基础图与原图分开保存；报告记录原图哈希、尺寸、实际增强参数和派生图哈希。读取经过增强的 TrueHDR 中间结果时，`convert-nvidia` 使用 `--sdr-base` 指定并校验对应派生 JPEG。
+## 转换流程
 
-转换流程由命令入口调用对应路线，再由 `output/export.py` 的 `export_hdr` 统一组织导出。`mapping.py` 负责共享高光映射，`output/ultrahdr.py` 和 `output/jxr.py` 分别负责对应格式编码，`native/` 包含原生编码桥接及构建脚本。默认目标为 1000 尼特；选择 400 尼特时，同一映射结果用于两种输出格式。
+| 功能 | 处理步骤 |
+| --- | --- |
+| vivo 高光重建 | 解析主图和私有辅助图 → 重建高光 → 导出 |
+| NVIDIA TrueHDR | 读取照片 → 转换输入色彩 → 可选放大、去噪或去模糊 → TrueHDR → 导出 |
+| NVIDIA 照片增强 | 读取照片 → 放大、去噪或去模糊 → 生成标准动态范围 JPEG 和报告 |
+| NVIDIA 中间结果复用 | 校验原图和中间结果的来源 → 校验派生基础图（如有）→ 导出 |
+
+vivo 重建和 NVIDIA TrueHDR 都使用线性 BT.2020、203 尼特参考白作为中间表示。`output/export.py` 统一组织导出。`mapping.py` 负责 400 尼特高光映射，Ultra HDR JPEG 和浮点 JPEG XR 共用映射结果。1000 尼特为默认导出目标。
 
 ```text
 src/hdrview/
-├─ __main__.py、cli.py       命令入口及编排
-├─ nvidia/
-│  ├─ preprocess.py         共享输入色彩转换
-│  ├─ vsr.py                可选放大、去噪、去模糊
-│  ├─ runtime.py            TrueHDR 模型与输出转换
-│  ├─ postprocess.py        中间结果来源校验
-│  └─ provenance.py         复用结果的报告追溯
-├─ vivo/                    手机辅助高光解析与候选重建
-├─ io/                      源文件、目录枚举、中间结果和输出目录
-├─ color/、mapping.py       色彩处理和目标亮度映射
-├─ output/                  两条管线的共享编码出口
-├─ native/                  C++ 桥接与唯一构建入口
+├─ __main__.py、cli.py       命令入口及批处理
+├─ release.py               Windows 单文件版入口
+├─ vivo/                    私有辅助图识别与高光重建
+├─ nvidia/                  模型运行、色彩转换及来源校验
+├─ io/                      源文件、目录输入、中间结果和输出
+├─ color/、mapping.py       色彩处理与目标亮度映射
+├─ output/                  共享编码出口
+├─ native/                  C++ 编码组件与构建脚本
 └─ verify/                  结构检查和参考解码
 ```
 
-调用链为：原图 → 色彩转换 → 可选视频超分辨率 → TrueHDR → 共享导出。独立 `enhance-vsr` 在生成派生基础 JPEG 后结束。复用中间结果的 `convert-nvidia` 直接进入来源校验与共享导出，报告中的 `intermediate_input` 记录两份输入中间文件的绝对路径与各自哈希；`vsr.executed=false` 表示本轮未重新执行模型，已有增强参数仍会保留。
+## 文件与报告
 
-- `color/`：色域、传递函数和颜色配置转换。
-- `io/`：源文件、输出目录和中间结果读写。`inputs.py` 统一识别 JPEG 扩展名，`intermediate.py` 统一中间文件命名，保留照片名称中的点号。
-- `verify/`：结构、回读和比较验证。
-- `tests/`：单元测试、集成测试和测试数据生成工具。
-- `docs/` 保存工作流、研究、验证和[样本说明](samples.md)。历史设计与实施计划集中在 [`docs/history/`](history/)。
-- `images/` 存放被 Git 忽略的本地图片数据。
-- `output/` 是默认输出根目录。命令在当前工作目录下创建 `output/vivo` 或 `output/nvidia`，将一批图片的产物和逐图报告直接写入对应目录。
+- `io/inputs.py` 负责目录中的 JPEG 枚举，`io/intermediate.py` 统一中间结果命名并保留照片名称中的点号。
+- 批量命令逐张编码到系统临时目录。整批完成后，`io/output.py` 通过独占创建将产物写入目标目录。写入异常时清理本批已发布的文件。
+- `convert-nvidia` 通过 `intermediate_input` 记录两份中间文件的绝对路径与哈希。派生基础图按文件名匹配，也可通过 `--sdr-base` 指定。重编码报告保留已记录的增强参数。
+- `images/` 存放本地样本。`output/vivo` 和 `output/nvidia` 是当前工作目录下的默认结果位置，批次中的图片、辅助文件和报告直接写入对应目录。
 
-批量命令在系统临时目录逐张处理，整批编码成功后再发布。`io/output.py` 检查目录与文件冲突，通过独占创建保护已有结果，发布失败时清理本次已写入的文件。
+## 开发目录
 
-项目源码与运行环境、图片数据及生成结果分开存放。`.venv` 可用于通用开发和测试，`.venv-nvidia` 用于 NVIDIA 依赖；环境需自行准备，项目不会自动创建或安装依赖。原生构建入口保留在 `src/hdrview/native/Build-Native.ps1`。历史设计记录描述当时的方案，当前使用方式以 [项目说明](../README.md) 和工作流文档为准。
+`.venv` 用于通用开发和测试，`.venv-nvidia` 用于 NVIDIA 模型依赖。原生构建入口为 `src/hdrview/native/Build-Native.ps1`，单文件打包入口为 `scripts/build-release.py`。
+
+`tests/` 保存单元测试、集成测试及测试数据生成工具。`docs/` 保存工作流、研究和验证记录，早期设计与计划集中在 [历史记录](history/)。

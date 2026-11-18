@@ -1,27 +1,30 @@
-# HDR 色彩管线约定
+# 高动态范围色彩流程
 
-## 输入
+## 输入与中间表示
 
-原始主图与 vivo 辅助图分别读取嵌入 ICC。Pillow 的 `convert("RGB")` 不应用 Display-P3 ICC，因此项目使用 Pillow ImageCms（LittleCMS）将其转换到标准 sRGB，不能仅丢弃 ICC 后把数值当 sRGB。
+主图通过 Pillow ImageCms 读取嵌入的国际色彩联盟配置并转换到标准 sRGB。vivo 重建将辅助图的 Display P3 数值直接线性化，再经 Rec.709 转为线性 BT.2020。辅助图诊断使用 ImageCms 转换到标准 sRGB，便于比较主辅图的亮度位置。
 
-## 中间表示
+| 项目 | 约定 |
+| --- | --- |
+| 计算像素 | 32 位浮点红、绿、蓝和透明度，透明度为 1 |
+| 中间文件 | 16 位浮点像素和配套 JSON 元数据 |
+| 色度和传递函数 | 线性 BT.2020 |
+| 标准动态范围参考白 | 203 尼特，线性值 `1.0` 对应该参考白 |
+| 像素范围 | 有限值，最大值为 65504。舍入误差允许最低 −0.01 的容差 |
+| 内容容量 | `hdr_capacity_max` 记录相对标准动态范围参考白的倍率 |
 
-- 像素计算：float32，RGBA，alpha=1。
-- 落盘：RGBA float16 + JSON sidecar，拒绝 NaN、Infinity 和超过 65504 的值。色域矩阵舍入可产生极小负分量，`_validate` 仅允许不小于 -0.01 的容差，低于该阈值即拒绝；这不是允许真实负亮度。
-- 色度：BT.2020；传递函数：linear。
-- SDR 参考白：203 nit。`1.0` 表示相对该参考白的线性光单位，不表示某台 HDR400 的峰值。
-- `hdr_capacity_max` 是相对 SDR 的倍率，不是标准元数据字段，也不等于显示器的 nit 上限。Ultra HDR HDR400 和 HDR1000 的实际容量分别为 `400/203≈1.97044` 和 `1000/203≈4.92611`；HDR400 编码前只对高光应用一次有理压缩映射，HDR1000 保留原内容。
+## NVIDIA 模型
 
-## NVIDIA 接口
+TrueHDR 输入使用 Rec.709 色度、D65 白点及 gamma 2.2。主图先转换到 sRGB，再通过逆传递函数取得线性光，并使用 gamma 2.2 编码。模型输出为 BT.2020 和感知量化编码，解包后转为绝对亮度，再除以 203 得到共享中间值。[NVIDIA Python 接口](https://docs.nvidia.com/maxine/vfx-python/latest/api.html)
 
-NVIDIA TrueHDR Python API 要求 Rec.709/D65、gamma 2.2。流程是 Display-P3 ICC → sRGB → sRGB 逆传递函数 → gamma 2.2。官方输出是 BT.2020/PQ；本项目将 PQ 转为绝对亮度，再除以 203 得到共享线性单位。HLG 不作为首选中间格式。
+## Ultra HDR JPEG
 
-## Ultra HDR 输出
+Google libultrahdr 的原始像素编码接口接收重建高动态范围像素与压缩的标准动态范围主图。编码器从这两部分计算增益及标准 `GainMapMax`，并保存可供普通查看器读取的基础 JPEG。vivo 样张中的 `maxGain` 作为原始观测值单独记录。
 
-HDR 重建与 SDR 主图共同交给官方 libultrahdr API-3，增益由实际重建关系计算。不能将 vivo `maxGain` 直接复制成标准 `GainMapMax`。不支持 HDR 的查看器仍应看到普通 SDR 基础图。
+400 尼特档先对高光应用一次有理压缩映射，容量为 `400/203≈1.97044`。1000 尼特档保留重建亮度关系，容量为 `1000/203≈4.92611`。
 
 ## Windows JPEG XR
 
-HDR400 映射后的 BT.2020/203-nit 线性像素乘以 `203/80`，再用 Rec.709→BT.2020 矩阵的**数值逆矩阵**转到 Rec.709 scRGB/80-nit，编码为 WIC `GUID_WICPixelFormat64bppRGBAHalf`。矩阵不是正交矩阵，不能用转置代替逆矩阵；原生回读使用正向矩阵和 `80/203` 返回共享模型。
+400 尼特映射后的线性 BT.2020 像素乘以 `203/80`，再经 Rec.709→BT.2020 矩阵的数值逆矩阵转换为 Rec.709 scRGB，参考白为 80 尼特。Windows Imaging Component 通过 `GUID_WICPixelFormat64bppRGBAHalf` 编码。回读使用正向矩阵和 `80/203` 还原到共享中间表示。
 
-JPEG XR 固定 scRGB 容量字段不表示绝对物理显示上限。WIC 浮点解码及内容峰值证明数值保留，不证明 Windows Photos HDR 显示已经验收。JPEG XR 与 PQ AVIF 不同，也不自动携带 HDR10 主控元数据。
+浮点回读用于核对像素格式、色彩与内容峰值。显示效果按设备、显示设置和查看器分别记录。[验证记录](../verification.md)

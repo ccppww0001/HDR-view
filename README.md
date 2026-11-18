@@ -1,21 +1,22 @@
 # HDR-view
 
-HDR-view 是一个面向 Windows 的照片处理工具，支持 vivo 私有辅助图识别与高光重建，以及 NVIDIA TrueHDR 照片增强。两条路线都支持批量生成 Ultra HDR JPEG。
+HDR-view 是一个面向 Windows 的批量照片处理工具，提供 vivo 私有辅助图识别与高光重建，以及 NVIDIA TrueHDR 照片增强。两条路线均可导出 Ultra HDR JPEG。
 
 ## Windows 单文件版
 
-在 `HDR-view.exe` 所在目录打开 PowerShell。单文件版可以直接转换、检查和验证图片，内含 Python 与原生编码组件。
+[下载 HDR-view.exe](https://github.com/ccppww0001/HDR-view/releases/latest/download/HDR-view.exe)。在可执行文件所在目录打开 PowerShell，输入照片文件或目录即可转换。
 
 ```powershell
 .\HDR-view.exe --help
-.\HDR-view.exe convert-vivo "D:\照片" -o ".\output\vivo"
+.\HDR-view.exe convert-vivo "D:\照片"
+.\HDR-view.exe verify ".\output\vivo"
 ```
 
-调用 NVIDIA 模型时需指定已安装模型依赖的 Python 环境。安装方法和单文件版构建步骤见 [Windows 发行版](docs/windows-release.md)。
+单文件版内置 Python 和原生编码组件。NVIDIA 模型使用单独安装的运行环境，配置和打包步骤见 [Windows 发行版](docs/windows-release.md)。
 
 ## 从源码运行
 
-在仓库根目录打开 PowerShell 7。准备 64 位 Windows、Python 3.12 和 Visual Studio 的「使用 C++ 的桌面开发」工作负载（含 CMake）。
+使用 64 位 Windows、PowerShell 7、Python 3.12，以及 Visual Studio 的「使用 C++ 的桌面开发」工作负载（含 CMake）。在仓库根目录执行以下命令。
 
 ```powershell
 py -3.12 -m venv .venv
@@ -25,47 +26,44 @@ python -m pip install -e .
 hdrview --help
 ```
 
-把示例路径换成你的原图或目录。vivo 转换使用上述环境，NVIDIA 增强需先完成 [NVIDIA 环境安装](docs/workflows/nvidia-truehdr.md#安装环境)。
-
-```powershell
-hdrview convert-vivo ".\images\vivo-photos"
-hdrview enhance-nvidia ".\images\photos" -o ".\results"
-hdrview enhance-vsr ".\images\a.jpg" ".\images\b.jpeg" --vsr-mode denoise
-```
+完成 [NVIDIA 环境安装](docs/workflows/nvidia-truehdr.md#安装环境)后，可用同一命令入口运行 TrueHDR、放大、去噪和去模糊。
 
 ## 输入与输出
 
-输入可以是一个或多个 JPEG 文件、目录，或两者的组合。目录只读取当前层的 `.jpg` 与 `.jpeg`，扩展名大小写均可。路径含空格时加引号。
+输入支持单个或多个 JPEG 文件、目录及其组合。目录读取当前层的 `.jpg` 和 `.jpeg`，扩展名大小写均可。含空格的路径请加引号。
 
-| 功能 | 命令 | 省略输出参数时的目录 |
+| 功能 | 命令 | 默认目录 |
 | --- | --- | --- |
 | vivo 高光重建并导出[^vivo-reference] | `convert-vivo` | `output/vivo` |
-| vivo 重建中间结果 | `reconstruct-vivo` | `output/vivo` |
+| 保存 vivo 重建中间结果 | `reconstruct-vivo` | `output/vivo` |
 | NVIDIA TrueHDR 增强并导出 | `enhance-nvidia` | `output/nvidia` |
 | 复用 NVIDIA 中间结果导出 | `convert-nvidia` | `output/nvidia` |
 | NVIDIA 照片放大、去噪或去模糊 | `enhance-vsr` | `output/nvidia` |
 
-默认目录相对于运行命令的位置。`-o`、`--output-dir` 或 `--output` 都可指定实际输出目录，例如 `-o ".\results"`。图片、相关中间文件和每张图的 `原图名-命令名-report.json` 直接保存在同一目录。
+默认路径相对于命令的运行目录。`-o`、`--output-dir` 和 `--output` 均可指定输出目录。图片、中间文件和逐图报告平铺存放，报告命名为 `原图名-命令名-report.json`。
 
-同一批次的原图需要使用不同的文件主名，例如 `a.jpg` 与 `a.jpeg` 会冲突。已有同名产物时，命令退出并报告冲突。重新处理同一张图时，可以通过 `-o` 选用另一目录。整批编码完成后才写入目标目录，原图保持只读。
+同批照片使用不同的文件主名。重跑同一张照片时，可通过 `-o` 将结果保存到另一目录。命令会报告同名冲突，整批编码成功后再写入目标目录。vivo 批处理会列出并跳过普通照片，遇到损坏或超出支持范围的辅助图结构时会报出对应文件。
 
-批量执行 vivo 转换时，程序会列出并跳过没有私有辅助图的文件。存在损坏或暂未支持的辅助图结构时，批次会停止并报告对应文件。
-
-常用转换默认生成 1000 尼特 Ultra HDR JPEG。指定 `--target-nits 400` 后导出 400 尼特 Ultra HDR JPEG 和浮点 JPEG XR，指定 `--target-nits 400 1000` 同时导出两档。独立的 `enhance-vsr` 输出标准动态范围 JPEG。
+转换默认输出 1000 尼特 Ultra HDR JPEG。选择 `--target-nits 400` 时输出 400 尼特 Ultra HDR JPEG 和浮点 JPEG XR，选择 `--target-nits 400 1000` 时同时导出两档。独立的 `enhance-vsr` 输出标准动态范围 JPEG。
 
 ```powershell
 hdrview convert-vivo ".\images\vivo-photos" -o ".\results\vivo" --target-nits 400 1000
+hdrview enhance-nvidia ".\images\photos" -o ".\results\nvidia"
 hdrview verify ".\results\vivo" --json ".\results\verification.json"
 ```
 
 ## 文档
 
-- [vivo 工作流](docs/workflows/vivo-reconstruction.md)涵盖样本兼容性、结构诊断和重建参数。vivo 输出是研究性高光重建，手机相册的极致动态范围观感仍待验证。
-- [NVIDIA 工作流](docs/workflows/nvidia-truehdr.md)涵盖环境安装、TrueHDR 参数、放大与去噪，以及已有中间结果的批量转换。
-- [验证记录](docs/verification.md)涵盖格式、参考解码和 Windows 显示验收。文件回读通过后，屏幕显示效果仍可用兼容显示器手动核验。
-- [项目结构](docs/structure.md)、[原生组件构建](src/hdrview/native/README.md)和[上游来源](docs/research/source-audit.md)供开发者参考。编码使用 Google 的 libultrahdr 和 libjpeg-turbo，模型增强调用 NVIDIA 官方软件包。
+| 内容 | 入口 |
+| --- | --- |
+| vivo 样本、格式检查和高光重建参数 | [vivo 工作流](docs/workflows/vivo-reconstruction.md) |
+| NVIDIA 环境、增强参数和中间结果复用 | [NVIDIA 工作流](docs/workflows/nvidia-truehdr.md) |
+| 样本来源、格式检查和参考解码结果 | [验证记录](docs/verification.md) |
+| 源码结构、原生构建和参考来源 | [项目结构](docs/structure.md) · [原生组件构建](src/hdrview/native/README.md) · [上游来源](docs/research/source-audit.md) |
 
-安装测试依赖后，在仓库根目录执行测试。部分集成测试使用 [本地样本](docs/samples.md)和已构建的原生工具。
+## 测试
+
+在仓库根目录安装测试依赖并运行测试。集成测试使用已构建的原生组件，样本用例读取[本地照片](docs/samples.md)。
 
 ```powershell
 python -m pip install -e ".[test]"
@@ -74,6 +72,6 @@ python -m pytest
 
 ## 许可证
 
-本项目原创代码和文档采用[零条款 BSD 许可证](LICENSE)（`0BSD`）。第三方依赖、原生库与模型适用各自的许可证。详见[上游来源](docs/research/source-audit.md)。
+当前源码和文档采用 [MIT 许可证](LICENSE)。使用、修改和分发时，保留版权声明和许可文本。各发行包以随包附带的许可证为准。第三方依赖、原生库与模型适用各自的许可证，见[上游来源](docs/research/source-audit.md)。
 
-[^vivo-reference]: vivo 私有辅助图的识别规则以 iQOO Neo9 Pro 样张为参考。
+[^vivo-reference]: vivo 私有辅助图的识别规则参考了 iQOO Neo9 Pro 样张。

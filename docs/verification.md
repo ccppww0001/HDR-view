@@ -2,59 +2,52 @@
 
 ## 2026-11-18 Windows 单文件发行版
 
-将 `HDR-view.exe` 单独复制到临时目录，并从搜索路径中移除 Python。两张 iQOO Neo9 Pro 样张在含中文和空格的路径下批量导出了 400 尼特与 1000 尼特 Ultra HDR JPEG、浮点 JPEG XR 及逐图报告。四张 Ultra HDR JPEG 均通过参考解码，原图哈希保持一致。
+从独立临时目录运行 `HDR-view.exe`，搜索路径仅包含 Windows 系统目录。两张样张通过含中文和空格的路径批量导出 400 尼特与 1000 尼特 Ultra HDR JPEG、浮点 JPEG XR 和逐图报告。四张 Ultra HDR JPEG 均通过参考解码，原图哈希保持一致。
 
-同一个可执行文件使用外部 NVIDIA 环境实际运行去噪与 TrueHDR，并在取消 NVIDIA 环境配置后读取已有中间结果进行重编码。已验证 `--licenses` 可读取随单文件打包的许可文本。见 [Windows 发行版](windows-release.md)。
+同一可执行文件通过独立 NVIDIA 环境运行去噪与 TrueHDR。重编码测试直接读取已有中间结果。`--licenses` 可读取随包提供的许可文本。[Windows 发行版](windows-release.md)
 
-## 2026-11-18 批量输出与 iQOO Neo9 Pro 样本复核
+## 2026-11-18 批量输出与样本复核
 
-用当天拍摄的 22 张原图实测批量转换。17 张带辅助图的照片在 `output/vivo` 平铺生成 Ultra HDR JPEG 和逐图报告，5 张只有相机元数据的照片被列出并跳过。此前被拒的 `maxGain=0.6358773` 样本已完成编码和参考解码。22 张原图的哈希保持一致。色彩分析见[私有格式研究](research/vivo-xdr-format.md#2026-11-18-照片复核)。
+当天的 22 张照片中，17 张含辅助图，在 `output/vivo` 平铺生成 Ultra HDR JPEG 和逐图报告。其余 5 张只含相机元数据，命令逐张列出并跳过。包含 `maxGain=0.6358773` 的样张通过编码与参考解码，22 张原图哈希保持一致。[样本与色彩分析](research/vivo-xdr-format.md#2026-11-18-照片复核)
 
-使用两张测试图片实际运行 NVIDIA 去噪与 TrueHDR，核验默认 `output/nvidia`、报告路径和混合目录的参考解码。随后按目录匹配中间文件及派生基础图，在指定目录批量导出 400 尼特 Ultra HDR JPEG 与浮点 JPEG XR。
+NVIDIA 路线用两张测试图实际运行去噪与 TrueHDR，核对 `output/nvidia`、报告路径及混合目录的参考解码。重编码按目录匹配中间文件和派生基础图，在指定目录导出 400 尼特 Ultra HDR JPEG 与浮点 JPEG XR。
 
-测试套件结果为 165 项通过、4 项因两张早期私人样本缺失而跳过。临时测试目录已清理。
+测试套件通过 165 项。另 4 项依赖两张早期私人样张，由测试工具记为跳过。测试临时目录在完成后清理。
 
-## 2026-11-17：视频超分辨率与输入输出复核
+## 2026-11-17 视频超分辨率与输入输出
 
-当前提供独立视频超分辨率与 TrueHDR 前的可选阶段，默认仍为关闭视频超分辨率、输出 1000 尼特。三类模式均已在本机 RTX 4070 Laptop 执行：缩小图的放大、去噪、去模糊；完整照片的 4096×3072 → 8192×6144 放大；完整照片去噪后执行 TrueHDR，生成 1000 尼特 Ultra HDR。相关本地输出位于 `output/IMG_20261116_204341/vsr-upscale/run-001` 和 `output/IMG_20261116_204341/nvidia-vsr-denoise/run-001`。这些文件不纳入 Git。
+在 NVIDIA GeForce RTX 4070 Laptop 显卡上运行缩小照片的放大、去噪和去模糊，完整照片的 4096×3072 → 8192×6144 放大，以及完整照片去噪后执行 TrueHDR。TrueHDR 导出了 1000 尼特 Ultra HDR。历史本地结果位于 `output/IMG_20261116_204341/vsr-upscale/run-001` 和 `output/IMG_20261116_204341/nvidia-vsr-denoise/run-001`。
 
-此前完整回归为 160 项通过。本轮修复带点照片名的中间结果命名冲突、重复目标亮度导致重复导出、目录遗漏 JPEG 扩展名，以及复用中间结果后报告丢失原增强参数与输入路径的问题。新报告保留来源参数，记录输入像素文件和元数据文件各自的哈希；旧文件缺失的可选参数不会补造。
+本轮覆盖带点文件名、大写 JPEG 扩展名、目标亮度去重，以及复用结果时的增强参数和文件哈希。用缩小样张实测了 2 倍放大、TrueHDR、1000 尼特导出、按中间像素路径重编码和参考解码。报告保留可从历史中间文件读取的来源字段。
 
-本轮完整命令为 `python -B -m pytest -q -p no:cacheprovider --basetemp=output/.release-review-tests`，设置 `PYTHONPATH=src`、`PYTHONUTF8=1`，使用 `.venv-nvidia`。结果 **163 项通过、零失败、零跳过，耗时 74.24 秒**。另以带点且使用大写 JPEG 扩展名的缩小照片，真实执行 2 倍视频超分辨率 → TrueHDR → 1000 尼特导出 → 显式中间像素路径重编码 → 完整参考解码，参数、文件哈希与原图不变检查均通过。新增 `python -m hdrview` 入口已验证，历史入口继续可用。测试目录与缩小样本均在完成后清理。
+在 `.venv-nvidia` 中设置 `PYTHONPATH=src` 和 `PYTHONUTF8=1`，执行 `python -B -m pytest -q -p no:cacheprovider --basetemp=output/.release-review-tests`。全部 163 项通过，用时 74.24 秒，上一轮通过 160 项。命令入口同时覆盖 `python -m hdrview` 和原有入口。测试目录与缩小样本在完成后清理。
 
-## 2026-11-17：默认 1000 尼特与导出结构整理
+## 2026-11-17 目标亮度与共享导出
 
-用户对比 `IMG_20261116_204341.jpg` 的两档结果后选择 1000 尼特。`convert-vivo`、`convert-nvidia`、`enhance-nvidia` 及底层 Ultra HDR 编码统一默认 1000 尼特；400 尼特通过 `--target-nits 400` 选择，双档通过 `--target-nits 400 1000` 选择。
+默认目标统一为 1000 尼特，400 尼特和双档输出由 `--target-nits` 选择。共享导出集中在 `src/hdrview/output/export.py`，覆盖命令入口、亮度选择和参考解码。五张样张通过辅助图解析与原图哈希检查，单个填充零字节按原始偏移读取。[项目结构](structure.md)
 
-共享导出迁至 `src/hdrview/output/export.py`，命令入口共用导出和重建参数定义。结构说明见 [项目结构](structure.md)。新增照片的单个零字节填充现由正式容器解析器识别，所有偏移仍指向原始字节，五张本地照片的辅助图解析与原文件不变检查通过。
+在 `.venv-nvidia` 中设置 `PYTHONPATH=src` 和 `PYTHONUTF8=1`，执行 `python -B -m pytest -q -p no:cacheprovider --basetemp=output/.structure-check-tests`。通过 123 项，目录联接用例依赖 Windows 创建权限，由测试工具记为跳过。测试临时目录在完成后清理。
 
-本轮以 Python 3.12 的 `.venv-nvidia` 环境执行完整测试，设置 `PYTHONPATH=src`、`PYTHONUTF8=1`，命令为 `python -B -m pytest -q -p no:cacheprovider --basetemp=output/.structure-check-tests`。结果为 **123 项通过、1 项跳过**；跳过项为当前受限 Windows 环境未授予创建目录联接权限的测试。默认仅输出 1000 尼特、显式双档输出、共享编码和参考解码均已覆盖。测试临时目录在结束后清理。
+## 2026-11-17 Ultra HDR 容器与回读
 
-## 2026-11-17：标准 Ultra HDR 垂直切片
+用 Google libultrahdr 2.0.2 和 libjpeg-turbo 3.2.0 构建 Windows 编码组件。64×64 合成图的标准动态范围底图为 64/255 灰阶，中央 16×16 区域的线性高动态范围亮度为底图的 4 倍。组件版本与来源见[原生组件构建](../src/hdrview/native/README.md)。
 
-已在本机使用官方 `libultrahdr v2.0.2`（提交 `e5f5a022…`）与固定 `libjpeg-turbo 3.2.0` 构建 Windows x64 桥接。64×64 合成图的 SDR 基础为 64/255 灰阶，中央 16×16 区域的线性 HDR 为 SDR 的 4 倍。
+- 使用 `is_uhdr_image` 核对底图、增益图和元数据，并检查多图容器以及 ISO 21496-1 和 XMP 两份标记。
+- 官方编码接口会重排容器标记。底图以像素、嵌入色彩配置和结构完整性验收。
+- 以 `display_boost=1` 解码得到标准动态范围底图，以完整容量解码恢复测试高光。Luma 样本验收识别了同时写入 ISO 21496-1 和 XMP 的文件。
 
-- 官方 `is_uhdr_image` 确认主图、增益图与元数据完整；容器含 MPF 与 ISO/XMP，不能只检查 XMP 标签。
-- API-3 会重排容器 marker；像素和 ICC 另行核验，原 JPEG 字节不必原样出现在输出中。
-- `display_boost=1` 得到 SDR；完整 HDR 容量解码恢复高光。编码同时写 ISO 21496-1 与 XMP，既有用户 Luma 验收已能识别原生 HDR；此前仅 ISO 不能识别。
+## 2026-11-17 高光映射与 Windows JPEG XR
 
-当前结果只证明标准编码与参考解码，不证明 vivo 公式正确或复现手机 XDR 观感。
+- 连续融合与高光映射用例覆盖极亮区域和暗部。400 尼特档采用一次有理映射，为 Ultra HDR JPEG 和浮点 JPEG XR 提供同一结果。1000 尼特档保留重建亮度关系。
+- Windows Imaging Component 使用 `GUID_WICPixelFormat64bppRGBAHalf` 编码并回读。集成测试覆盖尺寸、有限值、颜色、高光和同名冲突。Rec.709 与 BT.2020 之间使用数值逆矩阵，scRGB 参考白为 80 尼特。
+- 4096×3072 样张的历史结果位于 `output/vivo/run-006`。JPEG XR 通过浮点回读。两档 Ultra HDR JPEG 的容量分别为 `400/203≈1.97044` 和 `1000/203≈4.92611`。原图哈希为 `2124089e036e82be33924a0724ec0e3901069ea558e4080949975919c54c41fc`。
 
-## 2026-11-17：高光映射与 Windows JPEG XR
+本组记录覆盖文件结构、原生回读和数值关系。手机相册、Windows 照片应用和其他查看器的显示效果以同一设备和显示条件下的实机对照为准。
 
-- vivo 连续融合、共享 HDR400 有理映射及超高峰值/暗部测试已执行。HDR400 只映射一次，JPEG 和 JPEG XR 共用映射内容；HDR1000 保留原内容。
-- Windows WIC 原生 `GUID_WICPixelFormat64bppRGBAHalf` 编解码已执行；尺寸、有限值、颜色、高光及防覆盖有集成测试。Rec.709/BT.2020 使用数值逆矩阵，scRGB 参考白 80 尼特。
-- 单张真实 4096×3072 vivo 样本已写入主仓库新的 `output/vivo/run-006`。JPEG XR 编码后以 WIC 回读成功；官方 JPEG 报告容量分别为 400/203（1.97044）与 1000/203（4.92611），原图 SHA-256 保持 `2124089e036e82be33924a0724ec0e3901069ea558e4080949975919c54c41fc`。
-- 新样本仍标记“合理 HDR 重建，手机 XDR 观感未验证”；`windows_photos_hdr_verified=false`。Windows Photos、Luma 显示和其他查看器仍需手动验收，不能把 WIC 回读或能打开当成显示证明。
+## 2026-11-17 NVIDIA TrueHDR
 
-## 2026-11-17：NVIDIA 边界与自动化
+官方 `nvvfx.TrueHDR` 在独立 `.venv-nvidia` 环境运行，使用 PyTorch 2.11.0 的 CUDA 12.8 构建、NVIDIA 视频效果软件包 0.2.0.0、RTX 4070 Laptop 显卡及 617.14 驱动。输入为夜景样张 `IMG_20261116_212648.jpg`，历史结果位于 `output/nvidia/run-001`。报告记录 `gpu_executed=true`、对比度 100、饱和度 100、中灰 50、目标 1000 尼特和启用去色带，测得内容容量为 4.920855。4096×3072 的 Ultra HDR JPEG 与 JPEG XR 通过回读，并保存了可复用的线性中间文件。
 
-`enhance-nvidia` 使用官方 `nvvfx.TrueHDR`，无 ComfyUI。合成替代接口测试覆盖参数、固定版本及元数据回退、输出 H×W/`uint32` 校验、PQ/RGB10A2、CUDA 检查、运行顺序、模型释放、原图绑定、中间结果持久化与导出；缺依赖时输出目录不创建。
+运行时采用官方默认计算流 `stream_ptr=0`。调试中切换独立计算流触发了初始化错误 `-12`。RGB10A2 输出先复制到主机，再通过 NumPy 对无符号 32 位整数解包。替代接口用例覆盖参数、版本元数据回退、尺寸和数据类型检查、模型释放、原图哈希、中间文件及导出。实机视觉对照可比较区域边缘、高光细节和 vivo 路线的亮度关系。
 
-**本机真实 NVIDIA 已执行**：在项目根目录隔离 `.venv-nvidia` 安装 PyTorch 2.11.0+cu128 与 nvidia-vfx 0.2.0.0，CUDA 可用，GPU 为 RTX 4070 Laptop，驱动 617.14。`output/nvidia/run-001` 由真实 TrueHDR 模型处理原始夜景 `IMG_20261116_212648.jpg` 生成；报告 `gpu_executed=true`，默认参数为对比度 100、饱和度 100、中灰 50、目标 1000 尼特、开启去色带，实际内容容量为 4.920855。4096×3072 的 Ultra HDR JPEG 和 JPEG XR 均已验证/回读，且保存可复用的线性 HDR 中间文件。
-
-真实调试发现：显式创建并切换非默认 CUDA 流会使该版本 SDK 报初始化错误（代码 -12）；官方默认流最小测试成功。项目固定使用默认流 `stream_ptr=0`。PyTorch 2.11 CUDA 的 `uint32` 不支持按位运算，RGB10A2 改为先复制到主机、再用 NumPy 解包。这些是真实运行验证的兼容性修正，不是算法效果证明。
-
-NVIDIA 的 AI 视觉改善、区域边缘和亮部细节仍待用户与 vivo `run-006` 对照，不因 GPU 成功就宣称观感达标。
-
-最终完整测试命令：`.venv\Scripts\python.exe -m pytest -q`，最终审查修正后实际 **122 passed**，无跳过、无失败，耗时 94.20 秒。此前基线为 118 passed；本轮新增测试先观察到错误尺寸/数据类型被接受、版本元数据未回退、实际容量与中间文件缺失、JPEG XR 哈希字段未改名等失败，修正后相关 NVIDIA/JPEG XR 范围 **39 passed**。`verify --json` 的数组序列化回归测试也由失败转为通过。合成 NVIDIA 中间结果与替代模型只验证契约，不是模型证据。可选 10-bit AVIF PQ 未做编码或显示实测，不是默认输出。
+使用 `.venv\Scripts\python.exe -m pytest -q` 通过全部 122 项，用时 94.20 秒。此前基线通过 118 项，修正后的 NVIDIA 与 JPEG XR 相关范围通过 39 项。`verify --json` 的像素数组序列化回归用例也通过。10 位 AVIF 保留为独立诊断入口，日常导出使用 Ultra HDR JPEG 和浮点 JPEG XR。

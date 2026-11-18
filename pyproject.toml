@@ -7,7 +7,7 @@ name = "hdrview"
 version = "0.0.0"
 description = "可验证的 vivo XDR 与 NVIDIA HDR 研究工具"
 readme = "README.md"
-license = "0BSD"
+license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
