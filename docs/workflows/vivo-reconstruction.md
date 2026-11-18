@@ -1,12 +1,16 @@
-# vivo 研究候选工作流
+# iQOO Neo9 Pro 辅助高光重建
 
-`reconstruct-vivo` 只生成带 sidecar 的 HDR 中间结果；`convert-vivo` 默认导出 1000 尼特 Ultra HDR JPEG；使用 `--target-nits 400` 导出 400 尼特 Ultra HDR JPEG 和 JPEG XR，使用 `--target-nits 400 1000` 同时输出两种目标。所有生成结果默认进入项目 `output/<任务>/run-NNN`，不覆盖旧输出，不声称复现手机观感。
+已验证样本来自 iQOO Neo9 Pro。`vivo` 是设备写入文件的私有格式标识。批量重建时，没有私有辅助图的照片会被列出并跳过，存在但损坏或暂未支持的结构会结束该批次。单独转换一张没有辅助图的照片会报错。样本结构与隐私说明见[本地样本](../samples.md)。
 
 ```powershell
-$env:PYTHONPATH = 'src'
-python -m hdrview.cli inspect D:\MyProject\HDR-view\images\fromthephone
-python -m hdrview.cli analyze-vivo D:\MyProject\HDR-view\images\fromthephone\IMG_20261116_212648.jpg
-python -m hdrview.cli reconstruct-vivo D:\MyProject\HDR-view\images\fromthephone\IMG_20261116_212648.jpg --output <临时结果目录>
+hdrview inspect ".\images\fromthephone"
+hdrview analyze-vivo ".\images\vivo-photos"
+hdrview convert-vivo ".\images\vivo-photos"
+hdrview reconstruct-vivo ".\images\vivo-photos" -o ".\results\intermediate"
 ```
 
-参数默认：`additive-residual`、scale=4.0、max_gain_cap=4.5、highlight_threshold=0.02。它们是待标定研究参数，不是 vivo 官方参数。输出报告固定 `xdr_appearance_verified=false`，原始文件只读且输出目录不复用。
+- `inspect` 检查 JPEG 结构、哈希、辅助图偏移及私有 `maxGain` 观测值。`analyze-vivo` 分析主图与辅助图的高光关系，并列出缺少辅助图的照片。两条命令默认将报告写到终端，可通过 `--output report.json` 保存为文件。
+- `convert-vivo` 默认导出 1000 尼特 Ultra HDR JPEG。指定 `--target-nits 400` 时导出 400 尼特 Ultra HDR JPEG 和浮点 JPEG XR，指定 `--target-nits 400 1000` 同时输出两档。
+- `reconstruct-vivo` 保存线性高动态范围像素和配套元数据，文件名为 `原图名-vivo.f16rgba` 和 `原图名-vivo.json`。
+
+两条重建命令都支持多个文件和目录，省略 `-o` 时直接写入当前目录下的 `output/vivo`。每张图的报告随产物保存在同一目录。默认模型为 `additive-residual`，默认参数为 `--scale 4.0 --max-gain-cap 4.5 --highlight-threshold 0.02`。这些是研究参数，报告使用 `xdr_appearance_verified=false` 表明手机相册观感尚未验证。

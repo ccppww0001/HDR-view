@@ -1,59 +1,50 @@
-# NVIDIA TrueHDR 直接执行与输出
+# NVIDIA TrueHDR 与照片增强
 
-## 直接运行
+## 安装环境
 
-`enhance-nvidia` 直接调用官方 `nvvfx.TrueHDR`，不依赖 ComfyUI。要求 Windows x64、Python 3.12、隔离 `.venv-nvidia`、固定 `nvidia-vfx==0.2.0.0`、PyTorch 2.11.0+cu128 与支持 CUDA 的 NVIDIA GPU。本工具不自动创建环境或安装依赖；本机真实夜景结果位于 `output/nvidia/run-001`。
-
-```powershell
-$env:PYTHONPATH = 'src'
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-nvidia <原始 JPEG> --contrast 100 --saturation 100 --middle-gray 50 --luminance 1000
-```
-
-默认启用去色带，`--no-debanding` 显式关闭。运行前严格检查 `nvidia-vfx==0.2.0.0`；模块版本不是有效字符串时回退读取发行包元数据。模型先读取带 ICC 的源图，转换到 Rec.709 gamma 2.2 输入；克隆输出后先校验 H×W 与 `uint32`，再解包 BT.2020/PQ 并转为共享线性 BT.2020/203-nit。
-
-模型成功后先写入 `<原图 stem>-truehdr.f16rgba` 与 `<原图 stem>-truehdr.json`。报告的 `intermediate` 列出两个路径和原始照片 SHA-256，`nvidia_vfx`、`content_hdr_capacity_max` 与实际 HDR 一致。完整参数及 `gpu_executed=true` 仅在模型实际完成后写入报告；缺依赖、缺 CUDA、版本不匹配、模型失败或尺寸不匹配均在创建输出目录前失败，不生成伪结果。固定版本已实测要求官方默认 CUDA 流，RGB10A2 的 uint32 数据在主机 NumPy 解包，避免 PyTorch 2.11 的 CUDA 位运算限制。
-
-## 可选的视频超分辨率增强
-
-`enhance-nvidia --vsr` 在 TrueHDR 之前调用官方 `nvvfx.VideoSuperRes`；默认关闭，原有 TrueHDR 参数、颜色预处理与 1000 尼特默认输出保持不变。独立命令 `enhance-vsr` 使用相同增强参数，只导出增强后的标准 sRGB JPEG 和报告，不执行 TrueHDR。
+按[项目说明](../../README.md)准备 64 位 Windows、Python 3.12 和原生编码组件。运行模型还需兼容的 NVIDIA 显卡与驱动。建议在独立环境中安装模型依赖：
 
 ```powershell
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-nvidia <原始 JPEG> --vsr --vsr-mode upscale --vsr-scale 2 --vsr-quality high --vsr-strength 1
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-vsr <原始 JPEG> --vsr-mode denoise --vsr-quality high --vsr-strength 1
+py -3.12 -m venv .venv-nvidia
+.\.venv-nvidia\Scripts\Activate.ps1
+python -m pip install -e .
+python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install --only-binary=:all: nvidia-vfx==0.2.0.0 --index-url https://pypi.nvidia.com
+python -c "import torch, nvvfx; print(torch.cuda.is_available())"
 ```
 
-- `--vsr-mode`：`upscale` 放大、`denoise` 去噪或 `deblur` 去模糊，默认 `upscale`。
-- `--vsr-scale`：默认 2；放大支持整数 2、3、4 倍，去噪和去模糊固定为 1 倍。
-- `--vsr-quality`：`low`、`medium`、`high` 或 `ultra`，默认 `high`，对应官方 `QualityLevel`。
-- `--vsr-strength`：范围 0 到 1，默认 1。
+PyTorch 使用本项目验证过的 CUDA 12.8 构建。NVIDIA 软件包固定到引入 TrueHDR 的发行版。最后一条命令应打印 `True`。详见 [PyTorch 安装说明](https://pytorch.org/get-started/previous-versions/#v2110)和 [NVIDIA 软件包说明](https://pypi.org/project/nvidia-vfx/0.2.0.0/)。
 
-输出最长边不超过 16384 像素，总像素不超过 128 Mi。质量等级来自官方接口；图库照片的实际效果需要对照原图逐张评估。增强结果经伽马 2.2 转回 sRGB，保存为派生基础 JPEG，不替换原图。报告保留原图哈希和尺寸、实际增强参数与派生基础图哈希。
-
-对于经过增强的 TrueHDR 中间结果，`convert-nvidia` 必须指定 `--sdr-base <本次增强派生 JPEG>`，并校验派生基础图哈希。
+## 批量增强
 
 ```powershell
-.venv-nvidia\Scripts\python.exe -m hdrview convert-nvidia <原始 JPEG> --intermediate <结果目录/原图名-truehdr> --sdr-base <结果目录/原图名-VSR-base.jpg>
+hdrview enhance-nvidia ".\images\photos"
+hdrview enhance-nvidia ".\images\photos" --vsr --vsr-scale 2 -o ".\results\upscaled"
+hdrview enhance-vsr ".\images\photos" --vsr-mode denoise -o ".\results\denoised"
 ```
 
-`--intermediate` 可使用完整 stem，或对应 `.json` / `.f16rgba` 路径。名称中的其他点号完整保留。重编码报告的 `intermediate_input` 记录输入像素文件与元数据文件的绝对路径、各自 SHA-256，`vsr` 保留原增强模式、倍数、质量和强度，并标明本轮没有重新执行模型。缺少这些可选参数的旧中间文件仍可读取，报告只保留已知字段。
+`enhance-nvidia` 调用官方 TrueHDR，默认参数为 `--contrast 100 --saturation 100 --middle-gray 50 --luminance 1000`，默认启用去色带，可用 `--no-debanding` 关闭。生成的线性高动态范围中间文件以 `原图名-truehdr` 开头。报告记录原图哈希、实际模型参数、内容容量及 `gpu_executed`。
 
-## 已有中间结果
+`enhance-nvidia --vsr` 先增强照片，再执行 TrueHDR，并保存增强后的 `原图名-VSR-base.jpg` 作为编码基础图。独立的 `enhance-vsr` 输出 `原图名-VSR.jpg` 和报告。
 
-`convert-nvidia` 保留中间结果转换入口：
+| 参数 | 取值 |
+| --- | --- |
+| `--vsr-mode` | `upscale` 放大（默认）、`denoise` 去噪、`deblur` 去模糊 |
+| `--vsr-scale` | 放大支持 2、3、4 倍，默认 2。去噪和去模糊保持原尺寸，请省略此参数 |
+| `--vsr-quality` | `low`、`medium`、`high`（默认）、`ultra` |
+| `--vsr-strength` | 0 至 1，默认 1 |
+
+输出最长边为 16384 像素，总像素最多为 134217728。
+
+## 复用已有中间结果
 
 ```powershell
-$env:PYTHONPATH = 'src'
-python -m hdrview.cli convert-nvidia <原始 JPEG> --intermediate <中间结果 stem>
+hdrview convert-nvidia ".\images\photos" --intermediate ".\output\nvidia" -o ".\results\reencoded" --target-nits 400
+hdrview convert-nvidia ".\images\photo.jpg" --intermediate ".\output\nvidia\photo-truehdr.f16rgba" -o ".\results\single"
 ```
 
-它校验原图 SHA-256、尺寸和 `pipeline=nvidia-truehdr`，`gpu_executed=false` 表示本次只转换，不否定中间结果曾经来自真实模型，也不制造 GPU 证据。
+批量转换时，`--intermediate` 指向含有 `原图名-truehdr.f16rgba` 和 `原图名-truehdr.json` 的目录。若中间结果绑定增强后的基础图，命令会在该目录查找 `原图名-VSR-base.jpg`，也可使用 `--sdr-base` 指定另一个基础图目录。单图转换也接受具体的中间文件路径、去掉扩展名的路径，以及具体的基础图路径。
 
-源文件、模型和参数检查失败时结果目录尚未创建；最终编码阶段发生在新运行目录创建之后。如果编码失败，可保留该次中间文件供排查，并在重新运行时分配新的运行目录。成功标志以命令退出状态与完整 `report.json` 为准。
+转换时校验原图哈希、图像尺寸和派生基础图哈希。报告记录输入中间文件的路径与哈希、已有的增强参数，并标记本次为重编码（`gpu_executed=false`）。缺少部分可选增强参数的旧中间文件仍可读取。
 
-## 共享输出
-
-两条 NVIDIA 命令使用与 vivo 相同的编码出口：默认 `output/nvidia/run-NNN`，默认输出 1000 尼特 Ultra HDR JPEG。使用 `--target-nits 400` 可输出 400 尼特 Ultra HDR JPEG 与浮点 JPEG XR；使用 `--target-nits 400 1000` 可同时输出两个目标。HDR400 映射只执行一次，HDR1000 保留原内容；输出不覆盖已有文件。Windows Photos HDR 显示仍需手动验收，不能用 WIC 回读代替。
-
-## AVIF 诊断边界
-
-可选 10-bit AVIF PQ 不属于新管线默认输出；当前未实测其编码或显示。它不是 Ultra HDR/JPEG XR，也不自动具备完整 HDR10 主控元数据。
+转换和增强默认直接写入当前目录下的 `output/nvidia`。重新导出已有照片时，使用 `-o` 指定另一目录可以避免同名产物冲突。默认导出 1000 尼特 Ultra HDR JPEG，选择 400 尼特时还会输出浮点 JPEG XR。格式回读与 Windows 显示验收见[验证记录](../verification.md)，色彩处理与模型调用来源见[上游来源](../research/source-audit.md)。

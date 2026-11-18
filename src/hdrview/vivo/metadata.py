@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import math
 
 from hdrview.errors import InvalidVivoDataError
 
 
 @dataclass(frozen=True)
 class VivoMetadata:
-    max_gain: float | None
+    max_gain: float
     json: dict
 
 
@@ -35,6 +34,7 @@ def parse_vivo_metadata(data: bytes) -> VivoMetadata:
     max_gain = value.get("com.vivo.xdr.maxGain")
     if not isinstance(max_gain, (int, float)) or isinstance(max_gain, bool):
         raise InvalidVivoDataError("缺少数值型 com.vivo.xdr.maxGain")
-    if not math.isfinite(max_gain) or not 1 <= max_gain <= 1000:
-        raise InvalidVivoDataError("vivo maxGain 超出安全研究范围 [1,1000]")
+    # iQOO Neo9 Pro 的辅助图样本曾记录 0.6358773。该字段仅作为原始观测值保留。
+    if not 0 < max_gain <= 1000:
+        raise InvalidVivoDataError("带辅助图的 maxGain 必须为有限正值，且不超过 1000")
     return VivoMetadata(max_gain=float(max_gain), json=value)

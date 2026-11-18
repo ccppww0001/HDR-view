@@ -1,93 +1,68 @@
-# HDR-view：vivo 重建与 NVIDIA TrueHDR
+# HDR-view
 
-本项目使用共享的线性 BT.2020、203 尼特参考白中间表示，分别处理 vivo 私有辅助图候选重建与 NVIDIA 官方 TrueHDR 直接模型。默认输出 1000 尼特 Ultra HDR JPEG；选择 400 尼特时同时输出 Windows 原生浮点 JPEG XR。两条路线互不串联，不需要 ComfyUI。
+HDR-view 是一个面向 Windows 的照片处理工具。它可以利用 iQOO Neo9 Pro 原图中的 vivo 私有辅助图重建高光，也可以用 NVIDIA TrueHDR 增强普通照片。两条路线都支持批量生成 Ultra HDR JPEG。
 
-vivo 输出始终是**合理 HDR 重建，手机 XDR 观感未验证**。NVIDIA 已在本机真实执行一张夜景，结果见 `output/nvidia/run-001`；缺少依赖或 CUDA 时 `enhance-nvidia` 明确失败，不创建输出目录。Windows Photos 的 JPEG XR 显示效果和两条路线的视觉优劣仍需用户手动验收。
+## 快速开始
 
-## 构建与命令
-
-在项目根目录设置源码搜索路径，使用现有 NVIDIA 独立环境：
+在仓库根目录打开 PowerShell 7。准备 64 位 Windows、Python 3.12 和 Visual Studio 的「使用 C++ 的桌面开发」工作负载（含 CMake）。
 
 ```powershell
-$env:PYTHONPATH = (Join-Path (Get-Location) 'src')
-$env:PYTHONUTF8 = '1'
-$pythonPath = '.venv-nvidia\Scripts\python.exe'
-& $pythonPath -m hdrview --help
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+.\src\hdrview\native\Build-Native.ps1 -ToolDirectory (Join-Path (Get-Location) '.tools') -Test
+hdrview --help
 ```
 
-| 目的 | 调用方式（接在上述环境准备之后） |
-|---|---|
-| NVIDIA 高动态范围增强，默认 1000 尼特 | `& $pythonPath -m hdrview enhance-nvidia <原图>` |
-| 先放大 2 倍再增强高动态范围 | `& $pythonPath -m hdrview enhance-nvidia <原图> --vsr --vsr-scale 2` |
-| 同尺寸去噪后增强高动态范围 | `& $pythonPath -m hdrview enhance-nvidia <原图> --vsr --vsr-mode denoise --vsr-strength 0.5` |
-| 独立放大，输出普通 JPEG | `& $pythonPath -m hdrview enhance-vsr <原图> --vsr-scale 2` |
-| 独立去模糊 | `& $pythonPath -m hdrview enhance-vsr <原图> --vsr-mode deblur` |
-| vivo 辅助高光候选重建 | `& $pythonPath -m hdrview convert-vivo <原图>` |
-| 检查输出文件的结构与参考解码 | `& $pythonPath -m hdrview verify <输出文件或运行目录>` |
-
-路径有空格时使用引号。`python -m hdrview.cli` 与新入口兼容；目录检查和 vivo 批处理同时识别 `.jpg`、`.jpeg` 及大小写扩展名。重复的 `--target-nits` 数值会按输入顺序去重。
-
-构建入口统一位于 `src/hdrview/native/Build-Native.ps1`：
+把示例路径换成你的原图或目录。vivo 转换使用上述环境，NVIDIA 增强需先完成 [NVIDIA 环境安装](docs/workflows/nvidia-truehdr.md#安装环境)。
 
 ```powershell
-$env:HDRVIEW_TOOL_DIR = 'C:\Users\N452\AppData\Local\Temp\opencode\hdrview-build'
-pwsh -File src/hdrview/native/Build-Native.ps1 -Test
-$env:PYTHONPATH = 'src'
-.venv-nvidia\Scripts\python.exe -m hdrview.cli convert-vivo <原始 Neo9 Pro JPEG>
-.venv-nvidia\Scripts\python.exe -m hdrview.cli convert-nvidia <原始 JPEG> --intermediate <中间结果 stem>
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-nvidia <原始 JPEG>
+hdrview convert-vivo ".\images\vivo-photos"
+hdrview enhance-nvidia ".\images\photos" -o ".\results"
+hdrview enhance-vsr ".\images\a.jpg" ".\images\b.jpeg" --vsr-mode denoise
 ```
 
-`enhance-nvidia` 要求隔离 `.venv-nvidia` 中的 `nvidia-vfx==0.2.0.0`、PyTorch 2.11.0+cu128 和可用 NVIDIA CUDA 设备。项目不会自动创建该环境或安装依赖；环境准备完成后的参数示例：
+## 输入与输出
+
+输入可以是一个或多个 JPEG 文件、目录，或两者的组合。目录只读取当前层的 `.jpg` 与 `.jpeg`，扩展名大小写均可。路径含空格时加引号。
+
+| 功能 | 命令 | 省略输出参数时的目录 |
+| --- | --- | --- |
+| vivo 高光重建并导出 | `convert-vivo` | `output/vivo` |
+| vivo 重建中间结果 | `reconstruct-vivo` | `output/vivo` |
+| NVIDIA TrueHDR 增强并导出 | `enhance-nvidia` | `output/nvidia` |
+| 复用 NVIDIA 中间结果导出 | `convert-nvidia` | `output/nvidia` |
+| NVIDIA 照片放大、去噪或去模糊 | `enhance-vsr` | `output/nvidia` |
+
+`vivo` 是私有辅助图的格式标识。当前验证设备为 [iQOO Neo9 Pro](https://www.vivo.com.cn/vivo/param/iqooneo9pro)。
+
+默认目录相对于运行命令的位置。`-o`、`--output-dir` 或 `--output` 都可指定实际输出目录，例如 `-o ".\results"`。图片、相关中间文件和每张图的 `原图名-命令名-report.json` 直接保存在同一目录。
+
+同一批次的原图需要使用不同的文件主名，例如 `a.jpg` 与 `a.jpeg` 会冲突。已有同名产物时，命令退出并报告冲突。重新处理同一张图时，可以通过 `-o` 选用另一目录。整批编码完成后才写入目标目录，原图保持只读。
+
+批量处理 iQOO Neo9 Pro 照片时，程序会列出并跳过没有私有辅助图的文件。存在损坏或暂未支持的辅助图结构时，批次会停止并报告对应文件。
+
+常用转换默认生成 1000 尼特 Ultra HDR JPEG。指定 `--target-nits 400` 后导出 400 尼特 Ultra HDR JPEG 和浮点 JPEG XR，指定 `--target-nits 400 1000` 同时导出两档。独立的 `enhance-vsr` 输出标准动态范围 JPEG。
 
 ```powershell
-$env:PYTHONPATH = 'src'
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-nvidia <原始 JPEG> --contrast 100 --saturation 100 --middle-gray 50 --luminance 1000 --no-debanding
+hdrview convert-vivo ".\images\vivo-photos" -o ".\results\vivo" --target-nits 400 1000
+hdrview verify ".\results\vivo" --json ".\results\verification.json"
 ```
 
-`--no-debanding` 仅在指定时关闭去色带。运行前严格检查固定版本，模型输出必须为源图 H×W 的 `uint32` RGB10A2。成功后先保存 `*-truehdr.f16rgba` 和 `*-truehdr.json`；报告记录中间文件路径、输入 SHA-256、实际 NVIDIA 版本、实际内容容量、TrueHDR 参数和 `gpu_executed`。读取已有中间结果的 `convert-nvidia` 不会声称本次执行了 GPU。
+## 文档
 
-## NVIDIA 视频超分辨率增强
+- [vivo 工作流](docs/workflows/vivo-reconstruction.md)涵盖样本兼容性、结构诊断和重建参数。vivo 输出是研究性高光重建，手机相册的极致动态范围观感仍待验证。
+- [NVIDIA 工作流](docs/workflows/nvidia-truehdr.md)涵盖环境安装、TrueHDR 参数、放大与去噪，以及已有中间结果的批量转换。
+- [验证记录](docs/verification.md)涵盖格式、参考解码和 Windows 显示验收。文件回读通过后，屏幕显示效果仍可用兼容显示器手动核验。
+- [项目结构](docs/structure.md)、[原生组件构建](src/hdrview/native/README.md)和[上游来源](docs/research/source-audit.md)供开发者参考。编码使用 Google 的 libultrahdr 和 libjpeg-turbo，模型增强调用 NVIDIA 官方软件包。
 
-`enhance-nvidia --vsr` 调用 NVIDIA 官方 `nvvfx.VideoSuperRes`，先增强照片再执行 TrueHDR。默认关闭，原有 TrueHDR 参数、颜色预处理和 1000 尼特默认输出保持不变。独立的 `enhance-vsr` 只输出增强后的标准 sRGB JPEG 和报告。
+安装测试依赖后，在仓库根目录执行测试。部分集成测试使用 [本地样本](docs/samples.md)和已构建的原生工具。
 
 ```powershell
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-nvidia <原始 JPEG> --vsr --vsr-mode upscale --vsr-scale 2 --vsr-quality high --vsr-strength 1
-.venv-nvidia\Scripts\python.exe -m hdrview.cli enhance-vsr <原始 JPEG> --vsr-mode denoise --vsr-quality high --vsr-strength 1
+python -m pip install -e ".[test]"
+python -m pytest
 ```
 
-`--vsr-mode` 支持 `upscale`、`denoise` 和 `deblur`，默认 `upscale`；`--vsr-scale` 默认 2，放大支持整数 2、3、4 倍，去噪和去模糊保持原尺寸。`--vsr-quality` 支持 `low`、`medium`、`high`、`ultra`，默认 `high`，对应官方质量等级；`--vsr-strength` 范围为 0 到 1，默认 1。输出最长边不超过 16384 像素，总像素不超过 128 Mi。图库照片效果需要逐图对比。
+## 许可证
 
-增强输出经伽马 2.2 转回 sRGB，保存为派生基础 JPEG，原图保留。报告记录原图哈希和尺寸、实际增强参数及派生基础图哈希。转换经过增强的 TrueHDR 中间文件时，`convert-nvidia` 需要通过 `--sdr-base <本次增强派生 JPEG>` 提供基础图并校验哈希。详细说明见 [NVIDIA 工作流](docs/workflows/nvidia-truehdr.md)。
-
-复用结果时，新报告保留原增强参数，并在 `intermediate_input` 记录输入像素和元数据路径、各自哈希。本轮是否执行模型与历史增强来源分别记录。视频超分辨率调用官方 NVIDIA 包；位解包参考 Comfy-Org 官方扩展，来源见 [上游审计](docs/research/source-audit.md)。
-
-## 输出与 HDR400 映射
-
-默认输出为当前项目 `output/<任务>/run-NNN`，每次创建新目录，不覆盖历史文件。默认生成 1000 尼特 JPEG 和报告；选择 400 尼特时生成对应 JPEG 与 JPEG XR：
-
-- `*-UltraHDR-400nit.jpg`：HDR400 高光压缩后的标准 Ultra HDR，容量为 `400/203`。
-- `*-UltraHDR-1000nit.jpg`：未经 HDR400 压缩的原始 HDR 内容，容量为 `1000/203`。
-- `*-HDR-400nit.jxr`：与 HDR400 JPEG 相同映射内容的 Windows WIC 浮点 JPEG XR。
-- `report.json`：来源、参数、映射、实际容量和验证边界。
-
-HDR400 映射仅处理大于 203 尼特参考白的高光，保护 SDR 范围；同一个映射结果交给 JPEG 和 JPEG XR 编码，不重复应用。`--target-nits 400` 选择 400 尼特，`--target-nits 400 1000` 同时选择两个目标。容量是编码元数据中的 HDR/SDR 倍率，不是仪器测得的物理亮度；JPEG XR 报告的 `content_max_bt2020` 与 `native_content_max` 是回读内容峰值，`jxr_sha256` 是 JPEG XR 文件字节哈希，与原始照片 SHA-256 分开命名。
-
-## 显示验证
-
-Ultra HDR JPEG 同时写入 ISO 21496-1 与 XMP；此前的 Luma 用户验收已能识别原生 HDR。JPEG XR 使用 Rec.709 scRGB 浮点像素，参考白 80 尼特，不等同于 PQ AVIF，也不等于 HDR10 主控内容。
-
-在启用 Windows HDR 的兼容显示器上，用 Windows Photos 手动打开新生成的 `*-HDR-400nit.jxr`，检查高光、暗部与颜色；用 Luma 对照 HDR400 和 HDR1000 JPEG。当前报告固定 `windows_photos_hdr_verified=false`，格式解码成功不代表主观显示已验证。
-
-## 诊断与验证
-
-```powershell
-$env:PYTHONPATH = 'src'
-python -m hdrview.cli inspect <JPEG 或目录>
-python -m hdrview.cli analyze-vivo <vivo 原始 JPEG>
-python -m hdrview.cli reconstruct-vivo <vivo 原始 JPEG>
-python -m hdrview.cli verify <Ultra HDR JPEG 或输出目录> --json <新验证报告路径>
-.venv-nvidia\Scripts\python.exe -m pytest
-```
-
-源码结构与调用链见 [项目结构](docs/structure.md)。所有输出固定 `xdr_appearance_verified=false` 或同等明确的研究边界。设计与验证记录见 `docs/superpowers/specs/2026-11-17-hdr-mapping-windows-pipeline-design.md`、`docs/workflows/` 和 `docs/verification.md`。
+本项目原创代码和文档采用[零条款 BSD 许可证](LICENSE)（`0BSD`）。第三方依赖、原生库与模型适用各自的许可证。详见[上游来源](docs/research/source-audit.md)。

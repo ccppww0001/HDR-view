@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from shutil import copyfileobj
 
 from hdrview.errors import OutputConflictError
 
@@ -25,13 +26,10 @@ def _resolved(path: Path) -> Path:
     return path.resolve(strict=False)
 
 
-def create_output_dir(root: Path | None = None, *, sources: list[Path], task: str = "general") -> Path:
-    """默认进入项目 output/<task>/run-NNN，永不复用已有输出目录。"""
+def validate_output_dir(root: Path, sources: list[Path]) -> None:
+    """允许复用输出目录，仍隔离原图并拒绝链接目录。"""
 
-    if root is None:
-        root = Path(__file__).resolve().parents[3] / "output" / task
-
-    if root.exists() and (_is_link(root) or not root.is_dir()):
+    if _is_link(root) or (root.exists() and not root.is_dir()):
         raise OutputConflictError(f"输出根目录不能是链接或普通文件：{root}")
 
     resolved_root = _resolved(root)
@@ -40,15 +38,27 @@ def create_output_dir(root: Path | None = None, *, sources: list[Path], task: st
         if resolved_root == resolved_source or resolved_root in resolved_source.parents:
             raise OutputConflictError("输出目录不能等于源文件或包含源文件")
 
-    root.mkdir(parents=True, exist_ok=True)
-    if _is_link(root):
-        raise OutputConflictError("输出根目录不能是符号链接")
 
-    for index in range(1, 10_000):
-        candidate = root / f"run-{index:03d}"
-        try:
-            candidate.mkdir()
-        except FileExistsError:
-            continue
-        return candidate
-    raise OutputConflictError(f"无法分配新的输出目录：{root}")
+def publish_outputs(staging: Path, root: Path, sources: list[Path]) -> None:
+    """编码完成后发布整批文件，任何发布失败都撤回本次创建的文件。"""
+
+    validate_output_dir(root, sources)
+    files = sorted(staging.iterdir(), key=lambda path: (path.name.endswith("-report.json"), path.name.casefold()))
+    for path in files:
+        target = root / path.name
+        if target.exists() or _is_link(target):
+            raise OutputConflictError(f"输出文件已存在：{target}。请指定其他输出目录。")
+    root.mkdir(parents=True, exist_ok=True)
+    validate_output_dir(root, sources)
+    published = []
+    try:
+        for path in files:
+            target = root / path.name
+            # 独占创建，避免两个进程在检查之后同时写入同名文件。
+            with path.open("rb") as source, target.open("xb") as destination:
+                published.append(target)
+                copyfileobj(source, destination)
+    except BaseException:
+        for target in reversed(published):
+            target.unlink()
+        raise

@@ -94,7 +94,9 @@ def locate_vivo_trailer(data: bytes) -> VivoTrailer | None:
         raise InvalidJpegError("vivo streamdata 载荷不是 JPEG")
     auxiliary_segments = scan_jpeg(data[auxiliary_offset:info_offset])
     auxiliary_end = auxiliary_offset + auxiliary_segments[-1].offset + 2
-    if auxiliary_end != info_offset:
+    # 已有照片在辅助 JPEG 后含 4 个 NUL 对齐字节；只接受这段精确填充。
+    padding = data[auxiliary_end:info_offset]
+    if padding not in (b"", b"\x00" * 4):
         raise InvalidJpegError("vivo 辅助 JPEG 与 streaminfo 之间存在未声明数据")
     if data.count(b"streamdata") != 1 or data.count(_INFO) != 1:
         raise InvalidJpegError("vivo trailer 声明重复或数量不正确")

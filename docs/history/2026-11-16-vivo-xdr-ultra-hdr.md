@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12、NumPy、Pillow ImageCms/LittleCMS、OpenCV、pytest、C++17/CMake、官方 libultrahdr、ComfyUI ≥0.35.0、ComfyUI NVIDIA VFX Nodes 0.2.1、CUDA 13.0+ 对应 PyTorch。
 
-**Spec:** `docs/superpowers/specs/2026-11-16-vivo-xdr-ultra-hdr-design.md`
+**Spec:** [vivo XDR 与 Ultra HDR 设计](2026-11-16-vivo-xdr-ultra-hdr-design.md)
 
 ## Global Constraints
 

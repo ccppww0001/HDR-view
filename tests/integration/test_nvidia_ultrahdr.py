@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image, ImageCms
 
 from hdrview.cli import main
 from hdrview.color.icc import decode_with_icc
@@ -13,9 +14,6 @@ from hdrview.io.intermediate import read_intermediate
 from hdrview.model import ColorState, HdrImage, SdrImage
 from hdrview.nvidia.runtime import TrueHdrParams
 from hdrview.output.ultrahdr import inspect_ultrahdr
-
-SAMPLES = Path(r"D:\MyProject\HDR-view\images\fromthephone")
-
 
 def synthetic_nvidia_intermediate(tmp_path: Path, source: Path):
     sdr = decode_with_icc(source.read_bytes())
@@ -29,21 +27,22 @@ def synthetic_nvidia_intermediate(tmp_path: Path, source: Path):
     return write_intermediate(image, tmp_path / "truehdr")
 
 
-@pytest.mark.skipif(not SAMPLES.is_dir(), reason="私人原始样本不在工作区")
 def test_nvidia_intermediate_exports_standard_ultrahdr(tmp_path: Path):
-    source = SAMPLES / "IMG_20261116_212648.jpg"
+    source = tmp_path / "source.jpg"
+    icc = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    Image.new("RGB", (64, 48), (40, 50, 60)).save(source, "JPEG", icc_profile=icc)
     intermediate = synthetic_nvidia_intermediate(tmp_path, source)
 
     assert main(["convert-nvidia", str(source), "--intermediate", str(intermediate.stem), "--output", str(tmp_path / "out")]) == 0
 
-    run_dir = tmp_path / "out" / "run-001"
+    run_dir = tmp_path / "out"
     result = inspect_ultrahdr(run_dir / f"{source.stem}-UltraHDR-1000nit.jpg")
     assert result.is_ultrahdr
-    assert result.width == 4096
+    assert result.width == 64
     assert result.gainmap_width > 0
     assert result.hdr_capacity_max == pytest.approx(1000 / 203, rel=0.001)
     assert not list(run_dir.glob("*400nit*"))
-    report = json.loads((tmp_path / "out" / "run-001" / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((run_dir / f"{source.stem}-convert-nvidia-report.json").read_text(encoding="utf-8"))
     assert [item["target_nits"] for item in report["outputs"]] == [1000]
     assert [item["display_mapping"] for item in report["outputs"]] == ["none"]
     assert report["gpu_executed"] is False
@@ -106,11 +105,11 @@ def test_enhance_nvidia_persists_intermediate_and_reports_actual_provenance(tmp_
 
     assert main(["enhance-nvidia", str(source), "--output", str(tmp_path / "out")]) == 0
 
-    run_dir = tmp_path / "out" / "run-001"
+    run_dir = tmp_path / "out"
     intermediate = read_intermediate(run_dir / "source-truehdr")
     np.testing.assert_array_equal(intermediate.rgba, rgba.astype(np.float16).astype(np.float32))
     assert intermediate.hdr_capacity_max == 2.75
-    report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+    report = json.loads((run_dir / "source-enhance-nvidia-report.json").read_text(encoding="utf-8"))
     assert report["intermediate"] == {
         "pixel": str(run_dir / "source-truehdr.f16rgba"),
         "metadata": str(run_dir / "source-truehdr.json"),
@@ -123,9 +122,9 @@ def test_enhance_nvidia_persists_intermediate_and_reports_actual_provenance(tmp_
     assert report["outputs"] == [{"target_nits": 1000}]
 
 
-@pytest.mark.skipif(not SAMPLES.is_dir(), reason="私人原始样本不在工作区")
 def test_nvidia_hash_mismatch_is_rejected(tmp_path: Path):
-    source = SAMPLES / "IMG_20261116_212648.jpg"
+    source = tmp_path / "source.jpg"
+    Image.new("RGB", (64, 48), (40, 50, 60)).save(source, "JPEG")
     intermediate = synthetic_nvidia_intermediate(tmp_path, source)
     metadata = intermediate.metadata.read_text(encoding="utf-8").replace(intermediate.stem.name, intermediate.stem.name)
     import json

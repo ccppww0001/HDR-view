@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12、NumPy/OpenCV/Pillow、C++17、CMake、Windows WIC、libultrahdr v2.0.2；可选 PyTorch 2.11.0+cu128 与 nvidia-vfx 0.2.0.0。
 
-**Spec:** `docs/superpowers/specs/2026-11-17-hdr-mapping-windows-pipeline-design.md`
+**Spec:** [Windows 高动态范围映射与输出设计](2026-11-17-hdr-mapping-windows-pipeline-design.md)
 
 ## Global Constraints
 

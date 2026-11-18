@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from hdrview.errors import OutputConflictError, SourceChangedError
-from hdrview.io.output import create_output_dir
+from hdrview.io.output import publish_outputs, validate_output_dir
 from hdrview.io.source import assert_original_unchanged, read_source
 
 
@@ -32,29 +32,39 @@ def test_read_source_rejects_directory_and_missing_file(tmp_path: Path):
         read_source(tmp_path / "missing.jpg")
 
 
-def test_create_output_dir_makes_a_new_child_run_directory(tmp_path: Path):
+def test_publish_outputs_writes_directly_into_existing_directory(tmp_path: Path):
     source = tmp_path / "source.jpg"
     source.write_bytes(b"source")
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "first.jpg").write_bytes(b"first")
+    (staging / "second.jpg").write_bytes(b"second")
     output_root = tmp_path / "results"
+    output_root.mkdir()
+    (output_root / "existing.jpg").write_bytes(b"existing")
 
-    run_dir = create_output_dir(output_root, sources=[source])
+    publish_outputs(staging, output_root, [source])
 
-    assert run_dir.parent == output_root
-    assert run_dir.is_dir()
-    assert list(run_dir.iterdir()) == []
+    assert {path.name: path.read_bytes() for path in output_root.iterdir()} == {
+        "existing.jpg": b"existing", "first.jpg": b"first", "second.jpg": b"second",
+    }
 
 
-def test_create_output_dir_never_reuses_existing_run(tmp_path: Path):
+def test_publish_outputs_rejects_collision_before_writing_any_files(tmp_path: Path):
     source = tmp_path / "source.jpg"
     source.write_bytes(b"source")
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "first.jpg").write_bytes(b"first")
+    (staging / "second.jpg").write_bytes(b"second")
     output_root = tmp_path / "results"
+    output_root.mkdir()
+    (output_root / "second.jpg").write_bytes(b"existing")
 
-    first = create_output_dir(output_root, sources=[source])
-    second = create_output_dir(output_root, sources=[source])
+    with pytest.raises(OutputConflictError, match="second.jpg"):
+        publish_outputs(staging, output_root, [source])
 
-    assert first != second
-    assert first.name == "run-001"
-    assert second.name == "run-002"
+    assert {path.name: path.read_bytes() for path in output_root.iterdir()} == {"second.jpg": b"existing"}
 
 
 def test_output_cannot_be_source_or_its_parent(tmp_path: Path):
@@ -62,9 +72,9 @@ def test_output_cannot_be_source_or_its_parent(tmp_path: Path):
     source.write_bytes(b"source")
 
     with pytest.raises(OutputConflictError):
-        create_output_dir(source, sources=[source])
+        validate_output_dir(source, [source])
     with pytest.raises(OutputConflictError):
-        create_output_dir(tmp_path, sources=[source])
+        validate_output_dir(tmp_path, [source])
 
 
 def test_output_rejects_symlinked_root(tmp_path: Path):
@@ -87,7 +97,7 @@ def test_output_rejects_symlinked_root(tmp_path: Path):
         linked_output.symlink_to(real_output, target_is_directory=True)
 
     with pytest.raises(OutputConflictError):
-        create_output_dir(linked_output, sources=[source])
+        validate_output_dir(linked_output, [source])
 
 
 def test_original_hash_change_is_detected(tmp_path: Path):

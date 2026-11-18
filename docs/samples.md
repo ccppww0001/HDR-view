@@ -1,8 +1,8 @@
 # 样本与隐私说明
 
-## 当前验证样本
+## 早期验证样本
 
-`D:\MyProject\HDR-view\images\fromthephone` 中五张原始 JPEG。此目录被 Git 忽略，图片不会复制进测试 fixtures 或提交历史。
+`images/fromthephone/` 是放置本地原始样本的目录，已被 Git 忽略。以下五张原图是早期本地验证的记录。
 
 | 文件 | SHA-256 | 私有辅助图大小 | maxGain |
 |---|---|---:|---:|
@@ -23,4 +23,4 @@
 
 ## 兼容性承诺
 
-首版只接受上述 Neo9 Pro 当前 OriginOS 的已验证结构。其他机型/系统/相机模式应明确提示未验证或不支持；不要通过复制 `maxGain` 或私有辅助图伪造 Ultra HDR。
+当前支持 iQOO Neo9 Pro 的已验证结构。照片是否包含辅助图以文件结构为准，其中 `Make=vivo`、`Model=iQOO Neo9 Pro` 是设备写入的相机信息。当天批量核查记录见[私有格式研究](research/vivo-xdr-format.md#2026-11-18-照片复核)。

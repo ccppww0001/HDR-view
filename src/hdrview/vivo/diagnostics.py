@@ -12,6 +12,7 @@ import numpy as np
 from hdrview.color.icc import decode_with_icc
 from hdrview.vivo.auxiliary import extract_auxiliary_jpeg
 from hdrview.vivo.container import inspect_jpeg
+from hdrview.vivo.metadata import parse_vivo_metadata
 
 
 @dataclass(frozen=True)
@@ -79,10 +80,12 @@ def analyze_file(path: Path) -> dict:
     """读取真实文件的 ICC 正确主辅图，并输出可序列化证据。"""
 
     document = inspect_jpeg(path)
+    source = {"source": str(path), "source_sha256": document.sha256, "vivo": document.vivo is not None}
     if document.vivo is None:
-        raise ValueError("输入不含 vivo 私有辅助图")
+        return {**source, "status": "没有 vivo 私有高光辅助图"}
     primary_jpeg = document.data[: document.vivo.primary_eoi_offset + 2]
     primary = decode_with_icc(primary_jpeg).rgba[..., :3].astype(np.float32) / 255
     auxiliary = decode_with_icc(extract_auxiliary_jpeg(document)).rgba[..., :3].astype(np.float32) / 255
     report = analyze_vivo_alignment(primary, auxiliary)
-    return {"source_sha256": document.sha256, **asdict(report)}
+    metadata = parse_vivo_metadata(document.data[document.vivo.info_offset :])
+    return {**source, "vivo_max_gain_observed": metadata.max_gain, **asdict(report)}

@@ -38,7 +38,7 @@ def test_enhance_default_skips_vsr(tmp_path, monkeypatch):
     monkeypatch.setattr("hdrview.cli.export_hdr", lambda hdr, sdr, run_dir, stem, nits: {"target_nits": nits})
 
     assert main(["enhance-nvidia", str(source), "--output", str(tmp_path / "out")]) == 0
-    report = json.loads((tmp_path / "out/run-001/report.json").read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / "out/source-enhance-nvidia-report.json").read_text(encoding="utf-8"))
     assert report["vsr"] == {"executed": False}
     assert "sdr_base" not in report
 
@@ -72,8 +72,8 @@ def test_enhance_vsr_precedes_truehdr_and_persists_provenance(tmp_path, monkeypa
     monkeypatch.setattr("hdrview.cli.export_hdr", export)
     assert main(["enhance-nvidia", str(source), "--vsr", "--output", str(tmp_path / "out")]) == 0
     assert calls == ["vsr", "truehdr", "export"]
-    run_dir = tmp_path / "out/run-001"
-    report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+    run_dir = tmp_path / "out"
+    report = json.loads((run_dir / "source-enhance-nvidia-report.json").read_text(encoding="utf-8"))
     base = run_dir / "source-VSR-base.jpg"
     assert base.read_bytes() == derived.read_bytes()
     assert report["sdr_base"] == {"path": str(base), "sha256": digest(derived)}
@@ -86,20 +86,30 @@ def test_enhance_vsr_precedes_truehdr_and_persists_provenance(tmp_path, monkeypa
     assert report["intermediate"]["source_sha256"] == digest(source)
 
 
-def test_enhance_vsr_only_writes_sdr_jpeg(tmp_path, monkeypatch):
-    source = jpeg(tmp_path / "source.jpg")
+def test_enhance_vsr_batches_jpegs_into_default_nvidia_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    inputs = tmp_path / "input photos"
+    inputs.mkdir()
+    source = jpeg(inputs / "source.jpg")
+    second = jpeg(inputs / "second.JPEG")
+    nested = inputs / "nested"
+    nested.mkdir()
+    jpeg(nested / "ignored.jpg")
     derived = jpeg(tmp_path / "derived.jpg", (16, 12))
     image = decode_with_icc(derived.read_bytes())
     monkeypatch.setattr("hdrview.cli.run_vsr", lambda *args: VsrResult(image, {"executed": True}))
     monkeypatch.setattr("hdrview.cli.run_truehdr", lambda *args: pytest.fail("unexpected HDR"))
     monkeypatch.setattr("hdrview.cli.export_hdr", lambda *args: pytest.fail("unexpected export"))
-    assert main(["enhance-vsr", str(source), "--output", str(tmp_path / "out")]) == 0
-    run_dir = tmp_path / "out/run-001"
-    assert sorted(p.name for p in run_dir.iterdir()) == ["report.json", "source-VSR.jpg"]
-    assert (run_dir / "source-VSR.jpg").read_bytes() == derived.read_bytes()
-    report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
-    assert report["output_sha256"] == digest(derived)
-    assert report["source_sha256"] == digest(source)
+    assert main(["enhance-vsr", str(inputs), str(second)]) == 0
+    output = tmp_path / "output" / "nvidia"
+    assert len(list(output.iterdir())) == 4
+    for original in (source, second):
+        image = output / f"{original.stem}-VSR.jpg"
+        assert image.read_bytes() == derived.read_bytes()
+        report = json.loads((output / f"{original.stem}-enhance-vsr-report.json").read_text(encoding="utf-8"))
+        assert report["output"] == str(image)
+        assert report["output_sha256"] == digest(derived)
+        assert report["source_sha256"] == digest(original)
 
 
 @pytest.mark.parametrize("command", ["enhance-vsr", "enhance-nvidia"])
@@ -165,7 +175,7 @@ def test_convert_vsr_intermediate_checks_derived_base(tmp_path, monkeypatch, cas
         assert not (tmp_path / "out").exists()
         return
     assert main(args) == 0
-    report = json.loads((tmp_path / "out/run-001/report.json").read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / "out/source-convert-nvidia-report.json").read_text(encoding="utf-8"))
     assert report["gpu_executed"] is False
     assert report["vsr"] == {
         "executed": False, "intermediate_vsr_applied": True,
@@ -189,6 +199,7 @@ def test_verify_directory_excludes_vsr_base(tmp_path, monkeypatch, capsys):
         hdr_capacity_max: float = 2.0
 
     base = jpeg(tmp_path / "source-VSR-base.jpg")
+    jpeg(tmp_path / "source-VSR.jpg")
     result = jpeg(tmp_path / "source-UltraHDR-1000nit.jpg")
     inspected, decoded = [], []
     def inspect(path):

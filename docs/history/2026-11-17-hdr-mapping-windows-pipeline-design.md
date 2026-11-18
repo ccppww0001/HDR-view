@@ -1,5 +1,7 @@
 # 高光显示映射、NVIDIA 直接执行与 Windows 原生 HDR 设计
 
+本文记录历史设计。当前命令与输出目录见[项目说明](../../README.md)。
+
 - 日期：2026-11-17
 - 状态：用户已确认并实施；`feature/hdr-pipelines` 隔离工作区，真实 NVIDIA 夜景与 JPEG XR 已运行，Windows Photos 显示待用户验收
 - 基线：`3cf276a`，80 项测试通过、2 项缺少 GPU 环境而跳过

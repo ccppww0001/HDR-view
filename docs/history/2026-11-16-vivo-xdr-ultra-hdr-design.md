@@ -1,7 +1,7 @@
 # vivo XDR 与 NVIDIA AI 到标准 Ultra HDR 的项目设计
 
 - 日期：2026-11-16
-- 状态：用户已于 2026-11-16 批准；实施计划见 `docs/superpowers/plans/2026-11-16-vivo-xdr-ultra-hdr.md`
+- 状态：用户已于 2026-11-16 批准。详见[当时的实施计划](2026-11-16-vivo-xdr-ultra-hdr.md)。
 - 当前项目：`D:\MyProject\HDR-view`，尚无产品代码，当前目录不是 Git 仓库
 - 目标设备：iQOO Neo9 Pro / OriginOS；Windows 11；RTX 4070 Laptop（8 GiB）；HDR400 显示器
 

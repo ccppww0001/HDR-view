@@ -7,12 +7,12 @@ from hdrview.vivo.container import inspect_jpeg
 from hdrview.vivo.fuse import auxiliary_linear_bt2020, reconstruct_vivo
 from hdrview.vivo.reconstruct import ReconstructionParams
 
-SAMPLES = Path(r"D:\MyProject\HDR-view\images\fromthephone")
+SAMPLE = Path(__file__).resolve().parents[2] / "images/fromthephone/IMG_20261111_175548.jpg"
 
 
-@pytest.mark.skipif(not SAMPLES.is_dir(), reason="私人原始样本不在工作区")
+@pytest.mark.skipif(not SAMPLE.is_file(), reason="私人原始样本不在工作区")
 def test_vivo_reconstruction_preserves_shape_color_and_unknown_xdr_status():
-    document = inspect_jpeg(SAMPLES / "IMG_20261116_212648.jpg")
+    document = inspect_jpeg(SAMPLE)
 
     result = reconstruct_vivo(
         document,
@@ -29,16 +29,16 @@ def test_vivo_reconstruction_preserves_shape_color_and_unknown_xdr_status():
     assert "未验证" in result.diagnostics["status"]
 
 
-@pytest.mark.skipif(not SAMPLES.is_dir(), reason="私人原始样本不在工作区")
+@pytest.mark.skipif(not SAMPLE.is_file(), reason="私人原始样本不在工作区")
 def test_auxiliary_p3_is_not_clipped_to_srgb_before_linearization():
-    document = inspect_jpeg(SAMPLES / "IMG_20261116_212648.jpg")
+    document = inspect_jpeg(SAMPLE)
     from hdrview.vivo.auxiliary import extract_auxiliary_jpeg
 
     result = auxiliary_linear_bt2020(extract_auxiliary_jpeg(document), (64, 48))
 
     assert result.shape == (48, 64, 3)
     assert np.all(np.isfinite(result))
-    # 夜景黑色像素保持为零；色彩变换由独立合成色板测试验证。
+    # 样本中的黑色像素保持为零；色彩变换由独立合成色板测试验证。
     assert float(np.min(result)) == 0
 
 

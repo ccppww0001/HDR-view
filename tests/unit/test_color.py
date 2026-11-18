@@ -59,7 +59,7 @@ def test_rec709_pure_red_expands_into_bt2020():
 
 
 def test_decode_uses_display_p3_icc_instead_of_discarding_it():
-    source = Path(r"D:\MyProject\HDR-view\images\fromthephone\IMG_20261116_212648.jpg")
+    source = Path(__file__).resolve().parents[2] / "images/fromthephone/IMG_20261111_175548.jpg"
     if not source.is_file():
         pytest.skip("真实 Display-P3 配置不在本机")
     with Image.open(source) as phone:

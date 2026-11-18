@@ -82,7 +82,7 @@ def reconstruct_vivo(document: ImageDocument, params: ReconstructionParams) -> R
     return ReconstructionResult(
         image=image,
         diagnostics={
-            "vivo_max_gain_observed": metadata.max_gain or 1.0,
+            "vivo_max_gain_observed": metadata.max_gain,
             "auxiliary_luminance_max": float(np.max(luma)),
             "hdr_capacity_max_observed": capacity,
             "xdr_appearance_verified": False,
